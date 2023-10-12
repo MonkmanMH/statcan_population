@@ -1,0 +1,62 @@
+---
+title: "Population estimates, by province"
+output: html_document
+---
+
+
+```{r setup}
+# packages
+library(tidyverse)
+
+library(cansim)
+
+# utilities
+library(janitor)
+
+```
+
+
+# Data source
+
+Population estimates on July 1st, by age and sex1, 2, 3, 4
+Frequency: Annual
+
+Table: 17-10-0005-01 (formerly CANSIM 051-0001)
+
+Release date: 2022-12-21
+
+Geography: Canada, Province or territory
+
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710000501
+
+```{r}
+
+pop_est <- get_cansim("17-10-0005-01") |> 
+  janitor::clean_names()
+
+glimpse(pop_est)
+```
+
+## total pop, 5 year age groups
+
+Alberta
+
+```{r}
+
+pop_est_ab_5yr <- pop_est |>
+  filter(geo == "Alberta") |> 
+  filter(sex == "Both sexes") |> 
+  # use age group hierarchy to filter for 5 year age group level
+  filter(str_detect(hierarchy_for_age_group, "^1\\.\\d{1,2}$")) |> 
+  # filter for relevant years
+  filter(lubridate::year(date) >= 2015)
+
+pop_est_ab_5yr  
+
+write_csv(pop_est_ab_5yr, here::here("data_output", "pop_est_ab_5yr.csv"))
+write_rds(pop_est_ab_5yr, here::here("data_output", "pop_est_ab_5yr.rds"))
+
+```
+
+
+
