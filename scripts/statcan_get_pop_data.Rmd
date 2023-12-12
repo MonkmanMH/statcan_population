@@ -1,0 +1,346 @@
+---
+title: "population data retreval"
+author: "Martin Monkman"
+date: "2023-03-02"
+output: html_document
+---
+
+```{r setup}
+# packages
+library(tidyverse)
+library(readxl)
+# cansim
+# reference page: https://mountainmath.github.io/cansim/index.html
+library(cansim) 
+
+
+# create list of Vancouver Island CDs numbers
+vi_cd_list <- c("17", "19", "21", "23", "24", "26", "27", "43", "45")
+
+five_year_bins <- c(
+  "0 to 4 years",
+  "5 to 9 years",
+  "10 to 14 years",
+  "15 to 19 years",
+  "20 to 24 years",
+  "25 to 29 years",
+  "30 to 34 years",
+  "35 to 39 years",
+  "40 to 44 years",
+  "45 to 49 years",
+  "50 to 54 years",
+  "55 to 59 years",
+  "60 to 64 years",
+  "65 to 69 years",
+  "70 to 74 years",
+  "75 to 79 years",
+  "80 to 84 years",
+  "85 to 89 years",
+  "90 to 94 years",
+  "95 to 99 years",
+  "100 years and over"  
+)
+
+
+```
+
+
+## Data
+
+### by CD
+
+"CD" == "Census Division" == BC Regional District (the other provinces have different administrative regions that align with CDs)
+
+
+Population estimates, July 1, by census division, 2016 boundaries1, 2, 3, 4, 5, 6
+Frequency: Annual
+
+Table: 17-10-0139-01
+
+Release date: 2023-01-11
+
+Geography: Canada, Province or territory, Census division
+
+```{r}
+
+#pop_cd <- get_cansim("17-10-0139-01")
+
+write_rds(pop_cd, "pop_cd.rds")
+```
+
+#### apply filters
+
+```{r}
+# BC total population
+pop_cd %>% 
+  filter(GEO == "British Columbia") %>% 
+  filter(Sex == "Both sexes" &
+           `Age group` == "All ages")
+
+# Vancouver Island CDs 
+pop_cd_vi <- pop_cd %>%
+  #filter(str_detect(GeoUID, "59\\d\\d")) %>%
+  filter(str_detect(GeoUID, "^59")) %>%
+  filter(Sex == "Both sexes" &
+           `Age group` == "All ages") %>% 
+  
+  # filter for Vancouver Island
+  # create separate variable with just the CD number
+  mutate(geo_cd = as.character(str_sub(GeoUID, start = 3, end = 4)))  %>% 
+  filter(geo_cd %in% vi_cd_list)
+  
+pop_cd_vi
+
+```
+
+clean up Regional District names 
+
+* split into regional district name and province columns
+
+```{r}
+# split GEO into regional district and province
+pop_cd_vi <- pop_cd_vi %>% 
+  tidyr::separate_wider_delim(GEO, delim = ", ", names = c("regional_district", "province"))
+
+pop_cd_vi
+
+```
+
+
+```{r}
+# remove unnecessary columns, put into wide format
+pop_cd_vi_wide <- pop_cd_vi %>% 
+  select(
+    REF_DATE, 
+    regional_district, 
+    GeoUID,
+    VALUE
+    ) %>% 
+  pivot_wider(names_from = REF_DATE, values_from = VALUE)
+
+pop_cd_vi_wide
+
+```
+
+
+
+### by CSD
+
+CDs are divided into CSDs
+
+"CSD" == "Census Sub-Division" == Municipality, formal Indian Reserves and other First Nation lands, & other unincorporated rural areas (in BC, known as Regional District Electoral Areas)
+
+#### historical trends
+
+Population estimates, July 1, by census subdivision, 2016 boundaries1, 2, 3, 4, 5, 6
+Frequency: Annual
+
+Table: 17-10-0142-01
+
+Release date: 2023-01-11
+
+Geography: Canada, Province or territory, Census subdivision
+
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710014201
+
+```{r}
+
+#pop_csd <- get_cansim("17-10-0142-01")
+#write_rds(pop_csd, "pop_csd.rds")
+
+pop_csd <- read_rds("pop_csd.rds")
+```
+
+filter for BC & Vancouver Island
+
+
+```{r}
+
+
+pop_csd_bc <- pop_csd %>% 
+  filter(str_detect(DGUID, "2016A000559")) %>% 
+  mutate(geo_cd = as.character(str_sub(DGUID, start = 12, end = 13)))  %>% 
+  mutate(geo_csd = as.character(str_sub(DGUID, start = 14, end = 16)))  
+  
+pop_csd_bc
+
+# Vancouver Island CDs
+
+pop_csd_bc %>% 
+  filter(geo_cd %in% vi_cd_list)
+
+```
+
+
+
+#### Census 2021 - single year
+
+
+Age (in single years), average age and median age and gender: Census metropolitan areas, census agglomerations and census subdivisions1
+Frequency: Occasional
+
+Table: 98-10-0021-01
+
+Release date: 2022-04-27
+
+Geography: Census subdivision, Census metropolitan area, Census agglomeration
+
+Universe: Total Population, including institutional residents, 2021 and 2016 censuses — 100% data
+
+Variable List: Age (in single years), average age and median age (128), Census year (2), Gender (3a)
+
+
+How to cite: Statistics Canada. Table 98-10-0021-01  Age (in single years), average age and median age and gender: Census metropolitan areas, census agglomerations and census subdivisions
+DOI: https://doi.org/10.25318/9810002101-eng
+
+
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=9810002101
+
+```{r}
+
+
+df_pop_csd_detail <- read_csv("data_statcan/98100021.csv") |> 
+  janitor::clean_names()
+
+df_pop_csd_detail |> 
+  distinct(ref_date)
+
+```
+
+```{r}
+df_pop_csd_bc <- df_pop_csd_detail |> 
+  filter(str_detect(dguid, "2021A000559")) %>% 
+  mutate(geo_cd = as.character(str_sub(dguid, start = 12, end = 13)))  %>% 
+  mutate(geo_csd = as.character(str_sub(dguid, start = 14, end = 16)))  
+  
+df_pop_csd_bc_5yr <- df_pop_csd_bc |> 
+  filter(age_in_single_years_average_age_and_median_age_128 %in%
+           five_year_bins) |> 
+  rename(
+    age_grp = age_in_single_years_average_age_and_median_age_128,
+    pop_total = gender_3a_total_gender_1,
+    pop_men = gender_3a_men_2,
+    pop_women = gender_3a_women_3
+) |> 
+  mutate(age_grp = as_factor(age_grp))
+
+levels(df_pop_csd_bc_5yr$age_grp)
+
+```
+
+
+```{r}
+
+# Vancouver Island CDs
+
+df_pop_csd_vi_5yr <- df_pop_csd_bc_5yr %>% 
+  filter(geo_cd %in% vi_cd_list) |> 
+  select(
+    geo,
+    geo_cd,
+    geo_csd,
+    age_grp,
+    pop_total,
+    pop_men,
+    pop_women
+  ) 
+
+df_pop_csd_vi_5yr
+
+# calculate gender as pct of total, by geo
+df_pop_csd_vi_5yr <- df_pop_csd_vi_5yr |> 
+  group_by(geo) |> 
+  mutate(
+    total_pop_csd = sum(pop_total, na.rm = TRUE),
+    total_men_csd = sum(pop_men, na.rm = TRUE),
+    total_women_csd = sum(pop_women, na.rm = TRUE)
+    ) 
+
+  # checks -- doesn't add up due to random rounding
+#  mutate(
+#    total_total = total_men_csd + total_women_csd
+#  ) |> 
+#  mutate(
+#    total_check = total_pop_csd - total_total
+#  ) |> 
+#  select(geo, total_check)
+#
+
+df_pop_csd_vi_5yr <- df_pop_csd_vi_5yr |> 
+  mutate(
+    pct_men = pop_men / total_pop_csd * 100,
+    pct_women = pop_women / total_pop_csd * 100
+  ) |> 
+  mutate(pct_age_grp = pct_men + pct_women) |> 
+  ungroup()
+
+# check
+df_pop_csd_vi_5yr |> 
+  group_by(geo) |> 
+  summarise(total_pct_100 = sum(pct_age_grp))
+
+df_pop_csd_vi_5yr
+
+
+
+```
+
+
+```{r}
+df_pop_csd_vi_5yr_total <- df_pop_csd_vi_5yr |> 
+  group_by(age_grp) |> 
+  summarise(
+    total_pop = sum(pop_total, na.rm = TRUE),
+    total_men = sum(pop_men, na.rm = TRUE),
+    total_women = sum(pop_women, na.rm = TRUE)
+    )
+
+df_pop_csd_vi_5yr_total |> 
+  mutate(total_population = sum(total_pop)) |> 
+    mutate(
+    pct_men = total_men / total_men * 100,
+    pct_women = total_women / total_women * 100
+  )
+```
+
+
+  # now plot
+ggplot(aes(x = pop_2021,
+           y = age_grp,
+           colour = gender)) + 
+  geom_col(fill = "white")
+
+
+### pop pyramid: csd
+
+prep for plot
+
+```{r}
+df_pop_pyramid <- df_pop_csd_vi_5yr |> 
+  select(-contains("total"),
+         -contains("pct_age_grp")) |> 
+  # set value of men to negative
+  mutate(
+    pop_men = -pop_men,
+    pct_men = -pct_men
+  ) |> 
+  pivot_longer(-c(geo:age_grp), names_to = "gender", values_to = "pop_2021") 
+
+```
+
+
+```{r}
+df_pop_pyramid |> 
+  # filter for pop or pct
+  filter(str_detect(gender, "pop")) |> 
+  # filter for geography
+  filter(str_detect(geo, "Oak Bay")) |> 
+  
+  # now plot
+ggplot(aes(x = pop_2021,
+           y = age_grp,
+           colour = gender)) + 
+  geom_col(fill = "white")
+
+```
+

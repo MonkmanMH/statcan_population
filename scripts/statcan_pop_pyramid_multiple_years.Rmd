@@ -1,0 +1,389 @@
+---
+title: "population data retreval"
+author: "Martin Monkman"
+date: "2023-03-02"
+output: html_document
+---
+
+```{r setup}
+# packages
+library(tidyverse)
+library(readxl)
+# cansim
+# reference page: https://mountainmath.github.io/cansim/index.html
+library(cansim) 
+
+
+# create list of Vancouver Island CDs numbers
+vi_cd_list <- c("17", "19", "21", "23", "24", "26", "27", "43", "45")
+
+five_year_bins <- c(
+  "0 to 4 years",
+  "5 to 9 years",
+  "10 to 14 years",
+  "15 to 19 years",
+  "20 to 24 years",
+  "25 to 29 years",
+  "30 to 34 years",
+  "35 to 39 years",
+  "40 to 44 years",
+  "45 to 49 years",
+  "50 to 54 years",
+  "55 to 59 years",
+  "60 to 64 years",
+  "65 to 69 years",
+  "70 to 74 years",
+  "75 to 79 years",
+  "80 to 84 years",
+  "85 to 89 years",
+  "90 to 94 years",
+  "95 to 99 years",
+  "100 years and over"  
+)
+
+
+```
+
+
+## Census 2021 - single year
+
+
+Age (in single years), average age and median age and gender: Census metropolitan areas, census agglomerations and census subdivisions1
+Frequency: Occasional
+
+Table: 98-10-0021-01
+
+Release date: 2022-04-27
+
+Geography: Census subdivision, Census metropolitan area, Census agglomeration
+
+Universe: Total Population, including institutional residents, 2021 and 2016 censuses — 100% data
+
+Variable List: Age (in single years), average age and median age (128), Census year (2), Gender (3a)
+
+
+How to cite: Statistics Canada. Table 98-10-0021-01  Age (in single years), average age and median age and gender: Census metropolitan areas, census agglomerations and census subdivisions
+DOI: https://doi.org/10.25318/9810002101-eng
+
+
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=9810002101
+
+_NOTE: 98-10-0021-01 does NOT include Tofino and Ucluelet, perhaps due to boundary changes between the Census years_
+
+Age (in single years), average age and median age and gender: Canada, provinces and territories, census divisions, census subdivisions and dissemination areas
+Frequency: Occasional
+
+Table: 98-10-0023-01
+
+Release date: 2022-04-27
+
+Geography: Canada, Province or territory, Census division, Census subdivision, Dissemination area
+
+Universe: Total population, including institutional residents, 2021 Census — 100% data
+
+Variable List: Age (in single years), average age and median age (128), Gender (3)
+
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=9810002301
+
+How to cite: Statistics Canada. Table 98-10-0023-01  Age (in single years), average age and median age and gender: Canada, provinces and territories, census divisions, census subdivisions and dissemination areas
+DOI: https://doi.org/10.25318/9810002301-eng
+
+
+```{r}
+
+
+df_pop_csd_detail <- read_csv("data_statcan/98100021.csv") |> 
+  janitor::clean_names()
+
+
+```
+
+```{r}
+df_pop_csd_bc <- df_pop_csd_detail |> 
+  filter(str_detect(dguid, "2021A000559")) |> 
+# strip geo into component parts
+  # geocode with parenthesis
+  mutate(geo_code = str_match(geo, "\\(\\d{7}\\)")) |> 
+  mutate(geo_code = str_remove(geo_code, "^\\(")) |> 
+  mutate(geo_code = str_remove(geo_code, "\\)$")) |> 
+  # cd and csd numbers separately
+  mutate(geo_cd = as.character(str_sub(dguid, start = 12, end = 13)))  |> 
+  mutate(geo_csd = as.character(str_sub(dguid, start = 14, end = 16)))  |> 
+  # place name
+  mutate(geo_name = str_match(geo, "^.*\\(\\d")) |> 
+  mutate(geo_name = str_remove(geo_name, " \\(\\d$")) |> 
+  # geo type
+  mutate(geo_type = str_match(geo, " \\D+$")) |> 
+  mutate(geo_type = str_trim(geo_type))
+
+df_pop_csd_bc
+
+#write_rds(df_pop_csd_bc, "data_statcan/df_pop_csd_bc.rds")
+```
+
+```{r}
+
+#df_pop_csd_bc <- read_rds("data_statcan/df_pop_csd_bc.rds")
+  
+df_pop_csd_bc_5yr <- df_pop_csd_bc |> 
+  filter(age_in_single_years_average_age_and_median_age_128 %in%
+           five_year_bins) |> 
+  rename(
+    age_grp = age_in_single_years_average_age_and_median_age_128,
+    pop_total = gender_3a_total_gender_1,
+    pop_men = gender_3a_men_2,
+    pop_women = gender_3a_women_3,
+    census_year = census_year_2
+) |> 
+  mutate(age_grp = as_factor(age_grp))
+
+levels(df_pop_csd_bc_5yr$age_grp)
+
+#write_rds(df_pop_csd_bc_5yr, "data_statcan/df_pop_csd_bc_5yr.rds")
+
+```
+
+
+## BC 5 year
+
+```{r}
+
+# Vancouver Island CDs
+
+df_pop_csd_vi_5yr <- df_pop_csd_bc_5yr |> 
+  select(
+    census_year,
+    geo_name,
+    geo_type,
+    geo_cd,
+    geo_csd,
+    age_grp,
+    pop_total,
+    pop_men,
+    pop_women
+  ) |> 
+  filter(
+    geo_cd %in% vi_cd_list,
+    census_year == "2021")
+
+df_pop_csd_vi_5yr
+
+# check
+
+df_pop_csd_vi_5yr |> 
+  summarise(
+    total_pop = sum(pop_total, na.rm = TRUE)
+  )
+
+```
+
+```{r}
+
+# calculate gender as pct of total, by geo
+df_pop_csd_vi_5yr <- df_pop_csd_vi_5yr |> 
+  group_by(geo_name, geo_type) |> 
+  mutate(
+    total_pop_csd = sum(pop_total, na.rm = TRUE),
+    total_men_csd = sum(pop_men, na.rm = TRUE),
+    total_women_csd = sum(pop_women, na.rm = TRUE)
+    ) 
+
+  # checks -- doesn't add up due to random rounding
+#  mutate(
+#    total_total = total_men_csd + total_women_csd
+#  ) |> 
+#  mutate(
+#    total_check = total_pop_csd - total_total
+#  ) |> 
+#  select(geo, total_check)
+#
+
+df_pop_csd_vi_5yr <- df_pop_csd_vi_5yr |> 
+  mutate(
+    pct_men = pop_men / total_pop_csd * 100,
+    pct_women = pop_women / total_pop_csd * 100
+  ) |> 
+  mutate(pct_age_grp = pct_men + pct_women) |> 
+  ungroup()
+
+# check
+df_pop_csd_vi_5yr |> 
+  group_by(geo_name) |> 
+  summarise(total_pct_100 = sum(pct_age_grp))
+
+df_pop_csd_vi_5yr
+
+
+
+```
+
+### Vancouver Island total
+
+```{r}
+df_pop_csd_vi_5yr_total <- df_pop_csd_vi_5yr |> 
+  group_by(age_grp) |> 
+  summarise(
+    total_age_grp = sum(pop_total, na.rm = TRUE),
+    total_men = sum(pop_men, na.rm = TRUE),
+    total_women = sum(pop_women, na.rm = TRUE)
+    ) |> 
+  ungroup()
+
+df_pop_csd_vi_5yr_total <- df_pop_csd_vi_5yr_total |> 
+  mutate(total_population = sum(total_age_grp)) |> 
+    mutate(
+    pct_men = total_men / total_population * 100,
+    pct_women = total_women / total_population * 100
+  )
+
+df_pop_csd_vi_5yr_total
+
+```
+
+```{r}
+
+# prep for plot
+df_pl_vi_pyramid <- 
+  df_pop_csd_vi_5yr_total |> 
+  select(age_grp, pct_men, pct_women) |> 
+  mutate(pct_men = -pct_men) |> 
+  pivot_longer(-age_grp, names_to = "gender", values_to = "pct_of_pop") 
+  
+  # and plot
+pl_pyramid_vi <-  
+  ggplot(df_pl_vi_pyramid, aes(x = pct_of_pop,
+           y = age_grp,
+           colour = gender
+           )) + 
+  geom_col(fill = NA) +
+  theme_light()
+
+pl_pyramid_vi
+
+```
+
+fix scale numbering
+
+```{r}
+
+pop_range_breaks <- seq(-5, 5, by = 1)
+
+pl_pyramid_vi +
+   scale_x_continuous(breaks  = pop_range_breaks,
+                       labels = abs(pop_range_breaks))  
+
+```
+
+
+
+### pop pyramid: csd
+
+prep for plot
+
+```{r}
+df_pop_pyramid_csd <- df_pop_csd_vi_5yr |> 
+  select(-contains("total"),
+         -contains("pct_age_grp")) |> 
+  # set value of men to negative
+  mutate(
+    pop_men = -pop_men,
+    pct_men = -pct_men
+  ) |> 
+  pivot_longer(-c(census_year:age_grp), names_to = "gender", values_to = "pop_2021") 
+
+df_pop_pyramid_csd
+```
+
+```{r}
+
+# list of place names in "geo"
+community_names <- unique(df_pop_pyramid_csd$geo_name)
+community_names
+
+
+```
+
+
+### plot community
+
+```{r}
+community_name <- "Campbell River"
+
+df_pop_pyramid_community <- df_pop_pyramid_csd |> 
+  # filter for pop or pct
+  filter(str_detect(gender, "pop")) |> 
+  # filter for geography
+  filter(geo_name == community_name) 
+  
+  # now plot
+pl_pyramid_csd <- 
+ggplot(
+  df_pop_pyramid_community,
+  aes(x = pop_2021,
+           y = age_grp,
+           fill = gender)) + 
+  geom_col()
+
+# pl_pyramid_csd
+
+# fix scale numbering
+
+pop_range <- range(df_pop_pyramid_community$pop_2021)
+pop_range
+
+pop_range_breaks <- pretty(pop_range)
+
+pl_pyramid_csd +
+   scale_x_continuous(breaks  = pop_range_breaks,
+                       labels = abs(pop_range_breaks))  
+
+```
+
+
+
+### overlay VI region
+
+
+
+
+```{r}
+pl_pyramid_csd <- 
+df_pop_pyramid_csd |> 
+  # filter for pop or pct
+  filter(str_detect(gender, "pct")) |> 
+  # filter for geography
+  filter(geo_name == community_name) |> 
+  
+  # now plot
+ggplot(aes(x = pop_2021,
+           y = age_grp,
+           fill = gender)) + 
+  geom_col()
+
+pl_pyramid_csd
+
+# overlay region
+pl_pyramid_csd <- pl_pyramid_csd +
+  geom_col(
+    aes(
+      x = df_pl_vi_pyramid$pct_of_pop, 
+      y = df_pl_vi_pyramid$age_grp,
+      colour = gender 
+      ),
+    colour = "black",
+    size = 1,
+    fill = NA 
+    )
+
+
+# fix scale numbering
+
+pop_range_breaks <- seq(-10, 10, by = 2)
+
+pl_pyramid_csd +
+   scale_x_continuous(breaks  = pop_range_breaks,
+                       labels = abs(pop_range_breaks))  
+
+
+```
+

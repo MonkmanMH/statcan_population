@@ -1,0 +1,201 @@
+---
+title: "Vancouver Island population"
+author: "Martin Monkman"
+date: "2023-06-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# package setup
+library(tidyverse)
+
+# cansim
+# reference page: https://mountainmath.github.io/cansim/index.html
+library(cansim) 
+
+```
+
+
+
+## Data
+
+## by CD
+
+"CD" == "Census Division" == BC Regional District (the other provinces have different administrative regions that align with CDs)
+
+
+Vancouver Island CDs:
+
+```{r}
+
+# create list of Vancouver Island CDs numbers
+vi_cd_list <- c("17", "19", "21", "23", "24", "26", "27", "43", "45")
+```
+
+
+
+Population estimates, July 1, by census division, 2016 boundaries1, 2, 3, 4, 5, 6
+Frequency: Annual
+
+Table: 17-10-0139-01
+
+Release date: 2023-01-11
+
+Geography: Canada, Province or territory, Census division
+
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710013901
+
+
+```{r}
+
+### --- DATA CALL
+
+pop_cd <- get_cansim("17-10-0139-01")
+
+```
+
+
+#### apply filters
+
+
+```{r}
+
+
+# filter for Vancouver Island CDs 
+pop_cd_vi <- pop_cd |>
+  # filter for BC, total population
+  filter(str_detect(GeoUID, "^59")) |>
+  filter(Sex == "Both sexes" &
+           `Age group` == "All ages") |> 
+  # filter for Vancouver Island
+  # - create separate variable with just the CD number
+  mutate(geo_cd = as.character(str_sub(GeoUID, start = 3, end = 4)))  |> 
+  filter(geo_cd %in% vi_cd_list)
+
+```
+
+clean up Regional District names 
+
+* split into regional district name and province columns
+
+
+```{r}
+# split GEO into regional district and province
+pop_cd_vi <- pop_cd_vi |> 
+  tidyr::separate_wider_delim(GEO, delim = ", ", names = c("regional_district", "province"))
+```
+
+
+
+
+```{r}
+
+# remove unnecessary columns, reshape into wide format
+pop_cd_vi_wide <- pop_cd_vi |> 
+  select(
+    REF_DATE, 
+    regional_district, 
+    GeoUID,
+    VALUE
+  ) |> 
+  pivot_wider(names_from = REF_DATE, values_from = VALUE)
+
+
+pop_cd_vi_wide
+
+```
+
+
+#### alternate path
+
+Now we have the appropriate table filtered, it's possible to call only the specific variables (vectors) that we need.
+
+This is MUCH faster--it doesn't have to pull all the rest of Canada.
+
+The downside is that it doesn't have the label, which we have to get with `get_cansim_vector_info()`
+
+```{r}
+
+# make list of vector numbers
+
+lst_vector_cd_vi <- pop_cd_vi |> 
+  distinct(VECTOR) |> 
+  pull(VECTOR)
+  
+lst_vector_cd_vi
+
+```
+
+```{r}
+
+pop_vi_vector <- get_cansim_vector(lst_vector_cd_vi)
+
+```
+
+Get labels; join to main table
+
+```{r}
+tbl_vi_cd <- get_cansim_vector_info(lst_vector_cd_vi) |> 
+  select(VECTOR, title_en) |> 
+  separate(title_en, sep = ";", into = c("cd", "sex", "age")) |> 
+  mutate(cd = str_remove(cd, ", British Columbia"))
+  
+tbl_vi_cd
+
+```
+
+```{r}
+
+pop_vi_vector |> 
+  left_join(tbl_vi_cd, by = "VECTOR")
+```
+
+
+
+## by CSD
+
+CDs are divided into CSDs
+
+"CSD" == "Census Sub-Division" == Municipality, formal Indian Reserves and other First Nation lands, & other unincorporated rural areas (in BC, known as Regional District Electoral Areas)
+
+
+Population estimates, July 1, by census subdivision, 2016 boundaries1, 2, 3, 4, 5, 6
+Frequency: Annual
+
+Table: 17-10-0142-01
+
+Release date: 2023-01-11
+
+Geography: Canada, Province or territory, Census subdivision
+
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710014201
+
+```{r}
+
+pop_csd <- get_cansim("17-10-0142-01")
+
+```
+
+filter for BC & Vancouver Island
+
+
+```{r}
+
+
+pop_csd_bc <- pop_csd %>% 
+  filter(str_detect(DGUID, "2016A000559")) %>% 
+  mutate(geo_cd = as.character(str_sub(DGUID, start = 12, end = 13)))  %>% 
+  mutate(geo_csd = as.character(str_sub(DGUID, start = 14, end = 16)))  
+  
+pop_csd_bc
+
+# Vancouver Island CDs
+
+pop_csd_bc %>% 
+  filter(geo_cd %in% vi_cd_list)
+
+```
+
+

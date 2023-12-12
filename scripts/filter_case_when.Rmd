@@ -1,0 +1,89 @@
+---
+title: "dplyr::case_when filter example"
+author: "Martin Monkman"
+date: "2023-06-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+```
+
+
+See https://www.statology.org/dplyr-conditional-filter/
+
+See dplyr ref page: https://dplyr.tidyverse.org/reference/case_when.html
+
+
+
+Scenario: filter to return single row. In most cases in the data, this can be achieved with a single variable (x) but in one case it will require a second variable.
+
+1. make a toy tibble
+
+```{r}
+
+df <- tribble(
+  ~x, ~y, ~z,
+  "A", 1, "red",
+  "A", 2, "orange",
+  "B", 3, "yellow",
+  "C", 4, "blue"
+)
+
+```
+
+2 .filter for B
+
+```{r}
+
+df |> 
+  filter(x == "B")
+
+```
+
+
+
+3. filter for A
+
+```{r}
+
+df |> 
+  filter(x == "A")
+
+```
+
+
+
+`case_when()` to the rescue!
+
+
+```{r}
+
+x_val <- "A"
+
+df |> 
+  filter(case_when(
+    x_val == "A" ~ x == x_val & y == 1,
+    TRUE ~ x == x_val
+  )
+    ) 
+
+```
+
+
+
+```{r}
+
+x_val <- "B"
+
+df |> 
+  filter(case_when(
+    x_val == "A" ~ x == x_val & y == 1,
+    TRUE ~ x == x_val
+  )
+    ) 
+
+```
