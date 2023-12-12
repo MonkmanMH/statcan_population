@@ -1,0 +1,41 @@
+---
+title: "median age"
+author: "Martin Monkman"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+```
+
+```{r}
+df_pop_csd_detail <- read_rds(here::here("data_statcan", "98100023.rds"))
+
+```
+
+```{r}
+
+df_pop_csd_detail |> 
+  filter(
+    age_in_single_years_average_age_and_median_age_128 == "Median age"
+  ) |> 
+#  filter(
+#    geo == "Oak Bay"
+#  ) |> 
+  ## filter for BC
+  filter(
+    str_detect(dguid, "2021A000559")
+  ) |> 
+  ## subtract Indian Reserves and other First Nations communities
+  filter(
+    !str_detect(dguid, "8\\d\\d$")
+  ) |> 
+  arrange(desc(gender_3_total_gender_1))
+
+```
+
+

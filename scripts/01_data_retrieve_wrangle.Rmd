@@ -96,9 +96,10 @@ DOI: https://doi.org/10.25318/9810002301-eng
 ```{r}
 
 
-df_pop_csd_detail <- read_csv("data_statcan/98100023.csv") |> 
+df_pop_csd_detail <- read_csv(here::here("data_statcan", "98100023.csv")) |> 
   janitor::clean_names()
 
+write_rds(df_pop_csd_detail, here::here("data_statcan", "98100023.rds"))
 
 ```
 
