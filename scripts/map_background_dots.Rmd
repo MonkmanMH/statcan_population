@@ -1,0 +1,455 @@
+---
+title: "ggmap"
+author: "Martin Monkman"
+date: "2023-11-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggmap)
+
+library(here)
+
+
+# Stadia maps API key
+stadiaAPI <- readLines(here("mapping", "stadiaAPI.txt"))
+
+ggmap::register_stadiamaps(stadiaAPI, write = FALSE)
+
+
+# tidyverse
+#library(tidyverse)
+library(dplyr)
+library(ggplot2)
+
+library(sf)
+library(terra)  # for plotting population as dots
+
+#library(mapboxapi)
+
+# cancensus
+library(cancensus)
+# set cache directory
+options(cancensus.cache_path = here::here("cache_cancensus"))
+
+# API key
+# set API key (stored in text file "secretAPI.txt")
+secret_API_cancensus <- readLines(here("mapping", "secret_API_cancensus.txt"))
+options(cancensus.api_key = secret_API_cancensus)
+
+```
+
+https://search.r-project.org/CRAN/refmans/ggmap/html/make_bbox.html
+
+
+list of CMAs and CAs
+https://www12.statcan.gc.ca/census-recensement/2021/geo/maps-cartes/referencemaps-cartesdereference/sgc-cgt/map-eng.cfm?SGC=02_20
+
+https://www12.statcan.gc.ca/census-recensement/2021/ref/dict/tab/index-eng.cfm?ID=t1_1
+
+
+## Nanaimo
+
+```{r nanaimo_bounding_box, eval=FALSE}
+
+#lon = c(-123.8155, -124.2002)
+#lat = c(49.1350,49.2632)
+
+
+#nanaimo_bb <- c(
+#  left = -123.9, right = -124.1000,
+#  bottom = 49.1350, top = 49.2632
+#  )
+#nanaimo_bb <- make_bbox(lon, lat)
+
+
+#nanaimo_basemap <- get_stadiamap(
+#  bbox=nanaimo_bb, 
+#                           zoom = 11, 
+#                           maptype = 'stamen_terrain_background', 
+#                           source = 'stadia')
+
+#ggmap(nanaimo_basemap)
+
+```
+
+## Victoria
+
+### basemap
+
+  'arg' should be one of “stamen_terrain”, “stamen_toner”, “stamen_toner_lite”, “stamen_watercolor”, “alidade_smooth”, “alidade_smooth_dark”, “outdoors”, “stamen_terrain_background”, “stamen_toner_background”, “stamen_terrain_labels”, “stamen_terrain_lines”, “stamen_toner_labels”, “stamen_toner_lines”
+
+```{r victoria_bounding_box}
+
+
+lon <- c(-123.78, -123.23)
+lat <- c(48.30, 48.75)
+
+
+victoria_bb <- make_bbox(lon, lat)
+
+
+victoria_basemap <- get_stadiamap(
+  bbox=victoria_bb, 
+                           zoom = 10, 
+                           maptype = 'stamen_terrain_background', 
+                           source = 'stadia')
+
+ggmap(victoria_basemap)
+
+```
+
+### get census data
+
+
+```{r vector_list}
+# list of vectors with the 2021 Census data 
+vector_list <- c(
+  "v_CA21_1", 
+  "v_CA21_2", 
+  "v_CA21_3",
+  "v_CA21_4",
+  "v_CA21_5", 
+  "v_CA21_6", 
+  "v_CA21_7",
+  "v_CA21_8" 
+  )
+
+
+```
+
+Next we use the `get_census()` function to create a "sf" object, with the data and the corresponding shapes. In our code we specify the Census Metropolitan Area (CMA) number (Victoria is 59935, with the 59 referring to British Columbia), and the level of geography at the Census Tract (or "CT").
+
+Note the the `get_census()` function will also allow you to query a table with just the data, as well as options for other spatial formats beyond "sf".
+
+```{r get_sf_Victoria}
+
+cma_num <- "59935"
+
+# Return an sf-class data frame
+victoria_cma_sf <- get_census(
+  dataset='CA21', 
+  regions=list(CMA=cma_num),
+  vectors=c(vector_list), 
+  level='CT', 
+  quiet = TRUE,
+  geo_format = 'sf',
+  labels = 'short'
+  )
+
+```
+
+
+The "victoria_cma_sf" dataframe contains 84 rows, one for each of the Census Tracts in the Census Metropolitan Area.
+
+We can use this dataframe to plot an unadorned map of the region, showing the boundaries of the various Census Tracts. This uses `geom_sf()` within a `ggplot()` function. How easy is that?
+
+### Victoria CTs
+
+
+```{r}
+
+
+map_ct <- ggplot(victoria_cma_sf) +
+  geom_sf()
+
+map_ct
+
+```
+
+
+### choropleth
+
+One way we often see population mapped is as a choropleth, with the areas shaded by the value of the variable we are plotting. The vector number "v_CA21_1" contains the total population of each of the CTs; it's used as the `aes()` within the `geom_sf()`.
+
+One of the problems with this approach is that we end up with a smudge of shades of blue (with the default palette). The reason for this is that when determining the boundaries of the CTs, Statistics Canada strives to hold them to below 7,500 persons.^[[Statistics Canada, Census Tract](https://www150.statcan.gc.ca/n1/pub/92-195-x/2021001/geo/ct-sr/ct-sr-eng.htm)] A daysymetric dot-density map will help resolve this.
+
+```{r}
+
+map_ct +
+  geom_sf(aes(fill = v_CA21_1))
+
+
+```
+
+
+### dots
+
+
+To make our map, we need to take the total population of each CT, divide it by the number of people we want to represent with a dot, and then randomly assign a location of dots within that CT such that the total population is represented. 
+
+Fortunately for us, Kyle Walker has included an `as_dot_density()` function in the {tidycensus} package. This function has arguments that depend on the [{tigris} package](https://github.com/walkerke/tigris) that use the US Census shapefiles. Because of this dependency, these original `tidycensus::as_dot_density()` function won't work for areas outside the USA. 
+
+I have taken the liberty of creating a simplified version of `as_dot_density()` in the code below that will work for the Canadian context. You'll notice that the function relies on the [{terra} package](https://rspatial.github.io/terra/reference/terra-package.html) and the [`{sf} package`](https://r-spatial.github.io/sf/).
+
+
+
+```{r as_dot_density}
+
+as_dot_density <- function(
+    input_data,
+    value,
+    values_per_dot,
+    group = NULL
+) {
+  
+  # If group is identified, iterate over the groups, shuffle, and combine
+  if (!is.null(group)) {
+    
+    groups <- unique(input_data[[group]])
+    
+    output_dots <- purrr::map_dfr(groups, function(g) {
+      
+      group_data <- input_data[input_data[[group]] == g, ]
+      
+      group_data %>%
+        terra::vect() %>%
+        terra::dots(field = value,
+                    size = values_per_dot) %>%
+        sf::st_as_sf()
+    }) %>%
+      dplyr::slice_sample(prop = 1)
+    
+  } else {
+    output_dots <- input_data %>%
+      terra::vect() %>%
+      terra::dots(field = value,
+                  size = values_per_dot) %>%
+      sf::st_as_sf()
+  }
+  
+  # Sometimes, a strange dot gets thrown in.  Ensure this doesn't get returned.
+  output_dots <- sf::st_filter(output_dots, input_data)
+  
+  return(output_dots)
+  
+  
+}
+
+
+```
+
+
+In our `as_dot_density()` function we specify the dataframe, the variable (as `value =`) and the number of people to represent with each dot. For example, if the area has a population of 400 and you set `values_per_dot = 10`, it will assign 40 dots. After some experimentation, I landed on a value of 100 to produce a distribution I was happy with. I assigned this to an object `people_per_dot` so it can be used in the plot caption later.
+
+```{r}
+
+people_per_dot <- 100
+
+
+victoria_dots <- as_dot_density(
+  input_data = victoria_cma_sf,
+  value = "Population",
+  values_per_dot = people_per_dot
+)
+```
+
+
+```{r}
+map_ct_dots <- map_ct +
+  geom_sf(
+    mapping = aes(),
+    data = victoria_dots,
+    size = 0.01
+    ) 
+
+map_ct_dots
+
+```
+
+
+To this map, we can now apply some {ggplot2} formatting.
+
+```{r}
+map_ct_dots +
+  labs(
+    title = "Victoria, British Columbia, Canada",
+    subtitle = "Population, 2021 Census",
+    caption = glue::glue(
+      "1 dot = {people_per_dot} residents\nSource: Statistics Canada, 2021 Census"
+    )
+  )
+
+ggsave(here::here("plot_output", "Victoria_CMA_dot_density_2021.jpg"))
+
+```
+
+
+### choropleth on basemap
+
+
+```{r}
+ggmap(victoria_basemap) +
+  geom_sf(data = victoria_cma_sf,
+          inherit.aes = FALSE,
+          aes(fill = Population),
+          alpha = .5
+          )
+```
+
+
+### dots on basemap
+
+```{r}
+ggmap(victoria_basemap) +
+  geom_sf(
+    data = victoria_cma_sf,
+    inherit.aes = FALSE,
+    mapping = aes(),
+    alpha = 0.4
+    ) +
+  geom_sf(
+    data = victoria_dots,
+    inherit.aes = FALSE,
+    mapping = aes(),
+    colour = "black",
+    size = 0.01
+    ) +
+  theme(
+    axis.title = element_blank()
+  )
+
+```
+
+### where is the growth happening?
+
+
+
+## Courtenay CA
+
+https://www.openstreetmap.org/#map=11/49.6838/-124.8754
+
+
+CA number = "943"
+
+https://www12.statcan.gc.ca/census-recensement/2021/as-sa/fogs-spg/page.cfm?dguid=2021S0504943&lang=E&topic=1
+
+|Census subdivision (CSD) name|	Type|	Population 2021|	2016|	% change|code num| ca |
+|-----------------------------|-----|----------------|------|---------|--------|----|
+|Courtenay	|CY	|28,420	|25,639 r	|10.8|5926010| 59943 |
+|Comox |T	|14,806	|14,028	|5.5|5926005| 59943 |
+|Comox Valley A	|RDA	|7,926	|7,213	|9.9|5926021| 59943 |
+|Comox Valley B (Lazo North)	|RDA	|7,392	|7,095	|4.2|5926022| 59943 |
+|Cumberland	|VL	|4,447	|3,753	|18.5|5926014| 59943 |
+|Comox 1	|IRI	|291	|222	|31.1|5926801| 59943 |
+|Comox Valley C (Puntledge - Black Creek)| RDA | x | x | x | 5926024 | not in Courtenay CA |
+
+
+
+  'arg' should be one of “stamen_terrain”, “stamen_toner”, “stamen_toner_lite”, “stamen_watercolor”, “alidade_smooth”, “alidade_smooth_dark”, “outdoors”, “stamen_terrain_background”, “stamen_toner_background”, “stamen_terrain_labels”, “stamen_terrain_lines”, “stamen_toner_labels”, “stamen_toner_lines”
+  
+```{r courtenay_bounding_box}
+
+# narrow
+lon <- c(-125.06,-124.85)
+lat <- c(49.42, 49.74)
+
+# broad
+lon <- c(-125.2,-124.6)
+lat <- c(49.4, 49.8)
+
+
+courtenay_bb <- make_bbox(lon, lat)
+
+courtenay_basemap <- get_stadiamap(
+  bbox = courtenay_bb,
+  zoom = 10,
+#  maptype = 'stamen_terrain_background',
+#  maptype = 'alidade_smooth',
+  maptype = 'stamen_terrain',
+  source = 'stadia'
+)
+
+ggmap(courtenay_basemap)
+
+```
+
+
+### get census data
+
+
+```{r get_csd_sf_Courtenay}
+
+census_regions_21 <- list_census_regions("CA21")
+
+cma_num <- "59943"
+
+# Return an sf-class data frame
+courtenay_ca_sf <- get_census(
+  dataset='CA21', 
+  regions=list(CMA=cma_num),
+  vectors=c(vector_list), 
+  level='CSD', 
+  quiet = TRUE,
+  geo_format = 'sf',
+  labels = 'short'
+  )
+
+```
+
+
+### Courtenay CTs
+
+
+```{r}
+
+
+map_courtenay_csd <- ggplot(courtenay_ca_sf) +
+  geom_sf()
+
+map_courtenay_csd
+
+```
+
+
+
+```{r}
+
+people_per_dot <- 50
+
+
+courtenay_ca_dots <- as_dot_density(
+  input_data = courtenay_ca_sf,
+  value = "Population",
+  values_per_dot = people_per_dot
+)
+
+map_courtenay_csd_dots <- map_courtenay_csd +
+  geom_sf(
+    mapping = aes(),
+    data = courtenay_ca_dots,
+    size = 0.01
+    ) 
+
+map_courtenay_csd_dots
+
+```
+
+
+### dots on basemap
+
+
+```{r}
+ggmap(courtenay_basemap) +
+  geom_sf(
+    data = courtenay_ca_sf,
+    inherit.aes = FALSE,
+    mapping = aes(),
+    alpha = 0.4
+    ) +
+  geom_sf(
+    data = courtenay_ca_dots,
+    inherit.aes = FALSE,
+    mapping = aes(),
+    colour = "black",
+    size = 0.01
+    ) +
+  theme(
+    axis.title = element_blank()
+  )
+
+```
+
+## -30-

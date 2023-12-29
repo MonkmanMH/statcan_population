@@ -47,7 +47,7 @@ five_year_bins <- c(
 read data
 
 ```{r}
-df_pop_csd_vi_5yr <- read_rds("data_statcan/df_pop_csd_vi_5yr.rds")
+df_pop_csd_vi_5yr <- read_rds(here::here("data_statcan", "df_pop_csd_vi_5yr.rds"))
 
 ```
 
@@ -269,7 +269,7 @@ pl_pyramid_csd_region <-
       colour = gender 
       ),
     colour = "#E5E5E3",
-    size = 0.75,
+    linewidth = 0.75,
     fill = "#E5E5E3", alpha = 0.33 
     )
 
@@ -349,7 +349,6 @@ vi_community_plots
 plot_count <- nrow(vi_community_plots)
 
 for (i in 1:nrow(vi_community_plots)) {
-#for (i in 1:plot_count) {
 #  i <- 6
    community_name = vi_community_plots$geo_name[i]
    geo_cd_num <- vi_community_plots$geo_cd[i]
