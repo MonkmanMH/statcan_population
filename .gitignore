@@ -5,3 +5,11 @@
 *.Rproj
 
 data_output/
+
+# project files
+
+*.htm
+*.html
+
+*API*
+

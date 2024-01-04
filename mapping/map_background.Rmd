@@ -1,0 +1,73 @@
+---
+title: "ggmap"
+author: "Martin Monkman"
+date: "2023-11-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggmap)
+
+library(here)
+
+
+# Stadia maps API key
+stadiaAPI <- readLines(here("mapping", "stadiaAPI.txt"))
+
+ggmap::register_stadiamaps(stadiaAPI, write = FALSE)
+
+
+```
+
+https://search.r-project.org/CRAN/refmans/ggmap/html/make_bbox.html
+
+
+## Nanaimo
+
+```{r nanaimo_bounding_box}
+
+lon = c(-123.8155, -124.2002)
+lat = c(49.1350,49.2632)
+
+
+nanaimo_bb <- c(
+  left = -123.9, right = -124.1000,
+  bottom = 49.1350, top = 49.2632
+  )
+nanaimo_bb <- make_bbox(lon, lat)
+
+
+nanaimo_basemap <- get_stadiamap(
+  bbox=nanaimo_bb, 
+                           zoom = 11, 
+                           maptype = 'stamen_terrain_background', 
+                           source = 'stadia')
+
+ggmap(nanaimo_basemap)
+
+```
+
+## Victoria
+
+```{r victoria_bounding_box}
+
+
+lon <- c(-123.78, -123.23)
+lat <- c(48.30, 48.75)
+
+
+victoria_bb <- make_bbox(lon, lat)
+
+
+victoria_basemap <- get_stadiamap(
+  bbox=victoria_bb, 
+                           zoom = 10, 
+                           maptype = 'stamen_terrain_background', 
+                           source = 'stadia')
+
+ggmap(victoria_basemap)
+
+```
+
