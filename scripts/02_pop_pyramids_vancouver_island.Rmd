@@ -41,6 +41,12 @@ five_year_bins <- c(
 )
 
 
+# absolute value AND comma function
+# from https://stackoverflow.com/questions/37949473/how-do-you-make-ggplot-labels-use-both-labels-abs-and-labels-comma
+abs_comma <- function (x, ...) {
+  format(abs(x), ..., big.mark = ",", scientific = FALSE, trim = TRUE)
+}
+
 ```
 
 
@@ -94,6 +100,7 @@ df_pop_csd_vi_5yr_total <- df_pop_csd_vi_5yr |>
     ) |> 
   ungroup()
 
+
 df_pop_csd_vi_5yr_total <- df_pop_csd_vi_5yr_total |> 
   mutate(total_population = sum(total_age_grp)) |> 
     mutate(
@@ -120,8 +127,77 @@ df_pl_vi_pyramid <-
   mutate(pct_men = -pct_men) |> 
   pivot_longer(-age_grp, names_to = "gender", values_to = "pct_of_pop") 
 
+df_pl_vi_pyramid_total <- 
+  df_pop_csd_vi_5yr_total |> 
+  select(age_grp, total_men, total_women) |> 
+  mutate(total_men = -total_men) |> 
+  pivot_longer(-age_grp, names_to = "gender", values_to = "pop_total") 
+
 ```
 
+
+
+#### total pop
+
+```{r}
+
+community_total_population <- sum(abs(df_pl_vi_pyramid_total$pop_total))
+community_total_population <- format(community_total_population, big.mark = ",", trim = TRUE)
+
+
+# and plot
+pl_pyramid_vi <-  
+  ggplot(df_pl_vi_pyramid_total, aes(x = pop_total,
+           y = age_grp,
+           fill = gender
+           )) + 
+  geom_col() +
+  theme_classic() +
+  scale_fill_manual(
+    values=c("#0C3343", "#EF5A27"),          # dark blue and action orange
+    labels=c("men", "women")
+    )  +
+  xlab("population") +
+  ylab(NULL)
+
+#pl_pyramid_vi
+
+# fix scale numbering
+
+pop_range_breaks <- seq(-70000, 70000, by = 10000)
+
+pl_pyramid_vi_total <- pl_pyramid_vi +
+  scale_x_continuous(
+    breaks  = pop_range_breaks,
+    #                      limits = c(min(pop_range_breaks), max(pop_range_breaks)),
+    limits = c(-70000, 70000),
+#   labels = abs(pop_range_breaks)
+#    labels = scales::comma
+   labels = abs_comma  # custom function that combines absolute value AND commas
+  )  +
+# add vertical white "gridlines"
+  geom_vline(xintercept = pop_range_breaks, col="white") +
+  labs(title = "Vancouver Island",
+       subtitle = glue::glue("total population = {community_total_population}"),
+
+       caption = "Census 2021: Statistics Canada") +
+  theme(legend.position = "bottom")
+
+pl_pyramid_vi_total
+
+
+ggsave(here::here("plot_output/pyramid_van_isl_2021_population.jpg"),
+       width = 13.333,
+       height = 7.5
+  )
+
+
+```
+
+
+
+
+#### pct of pop
 
 ```{r}
   
@@ -151,16 +227,16 @@ pl_pyramid_vi +
 #                      limits = c(min(pop_range_breaks), max(pop_range_breaks)),
                       limits = c(-9, 9),
                        labels = abs(pop_range_breaks))  +
-  labs(
-    title = "Vancouver Island",
-    caption = "Census 2021: Statistics Canada"
-  ) +
+# add vertical white "gridlines"
+#  geom_vline(xintercept = pop_range_breaks, col="white") +
+  labs(title = "Vancouver Island",
+       subtitle = glue::glue("total population = {community_total_population}"),
+
+       caption = "Census 2021: Statistics Canada") +
   theme(legend.position = "bottom")
-  
-  
 
 
-ggsave("plot_output/pyramid_van_isl_2021.jpg",
+ggsave(here::here("plot_output/pyramid_van_isl_2021_pct.jpg"),
        width = 13.333,
        height = 7.5
   )
@@ -221,7 +297,7 @@ pop_range_breaks <- pretty(pop_range)
 pl_pyramid_csd +
    scale_x_continuous(breaks  = pop_range_breaks,
                        labels = abs(pop_range_breaks)) +
-  theme_light()
+  theme_light() 
 
 
 ## overlay region
@@ -254,6 +330,8 @@ pl_pyramid_csd <- pl_pyramid_csd +
 #                      limits = c(min(pop_range_breaks), max(pop_range_breaks)),
                       limits = c(-9, 9),
                        labels = abs(pop_range_breaks))  
+#  geom_vline(xintercept = pop_range_breaks, col="white")
+
 
 ### ---
 
@@ -271,7 +349,9 @@ pl_pyramid_csd_region <-
     colour = "#E5E5E3",
     linewidth = 0.75,
     fill = "#E5E5E3", alpha = 0.33 
-    )
+    )  
+#  geom_vline(xintercept = pop_range_breaks, col="white")
+
 
 # add title
 pl_pyramid_csd_region <- pl_pyramid_csd_region +
@@ -304,13 +384,13 @@ geo_csd_num <- "023"
 plot_temp <- pop_pyramid_fun(community_name, geo_csd_num)
 plot_temp
 
-  ggsave(
-    filename = 
-      glue::glue("plot_output/pyramid_cd{geo_cd_num}_csd{geo_csd_num}_{community_name}_2021.jpg"), 
-       plot_temp,
-       width = 13.333,
-       height = 7.5
-    )
+ggsave(
+  filename = 
+    here::here(glue::glue("plot_output/pyramid_cd{geo_cd_num}_csd{geo_csd_num}_{community_name}_2021.jpg")), 
+     plot_temp,
+     width = 13.333,
+     height = 7.5
+  )
 
 ```
 
@@ -358,7 +438,7 @@ for (i in 1:nrow(vi_community_plots)) {
    
   ggsave(
     filename = 
-      glue::glue("plot_output/pyramid_cd{geo_cd_num}_csd{geo_csd_num}_{community_name}_2021.jpg"), 
+    here::here(glue::glue("plot_output/pyramid_cd{geo_cd_num}_csd{geo_csd_num}_{community_name}_2021.jpg")), 
        plot_temp,
        width = 13.333,
        height = 7.5
