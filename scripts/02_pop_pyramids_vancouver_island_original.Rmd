@@ -1,0 +1,702 @@
+---
+title: "population data: retrieval and wrangling"
+subtitle: "Census 2021: Census Subdivisions"
+author: "Martin Monkman"
+date: "2023-06-29"
+output: html_document
+---
+
+```{r setup}
+# packages
+library(tidyverse)
+library(readxl)
+library(glue)
+
+
+# create list of Vancouver Island CDs numbers
+vi_cd_list <- c("17", "19", "21", "23", "24", "26", "27", "43", "45")
+
+five_year_bins <- c(
+  "0 to 4 years",
+  "5 to 9 years",
+  "10 to 14 years",
+  "15 to 19 years",
+  "20 to 24 years",
+  "25 to 29 years",
+  "30 to 34 years",
+  "35 to 39 years",
+  "40 to 44 years",
+  "45 to 49 years",
+  "50 to 54 years",
+  "55 to 59 years",
+  "60 to 64 years",
+  "65 to 69 years",
+  "70 to 74 years",
+  "75 to 79 years",
+  "80 to 84 years",
+  "85 to 89 years",
+  "90 to 94 years",
+  "95 to 99 years",
+  "100 years and over"  
+)
+
+
+```
+
+
+read data
+
+```{r}
+df_pop_csd_vi_5yr <- read_rds("data_statcan/df_pop_csd_vi_5yr.rds")
+
+```
+
+
+
+### Vancouver Island total
+
+
+
+```{r}
+
+df_pop_csd_vi_5yr_total <- df_pop_csd_vi_5yr |> 
+  group_by(age_grp) |> 
+  summarise(
+    total_age_grp = sum(pop_total, na.rm = TRUE),
+    total_men = sum(pop_men, na.rm = TRUE),
+    total_women = sum(pop_women, na.rm = TRUE)
+    ) |> 
+  ungroup()
+
+df_pop_csd_vi_5yr_total <- df_pop_csd_vi_5yr_total |> 
+  mutate(total_population = sum(total_age_grp)) |> 
+    mutate(
+    pct_men = total_men / total_population * 100,
+    pct_women = total_women / total_population * 100
+  )
+
+df_pop_csd_vi_5yr_total
+
+```
+
+```{r}
+
+# prep for plot
+df_pl_vi_pyramid <- 
+  df_pop_csd_vi_5yr_total |> 
+  select(age_grp, pct_men, pct_women) |> 
+  mutate(pct_men = -pct_men) |> 
+  pivot_longer(-age_grp, names_to = "gender", values_to = "pct_of_pop") 
+  
+# and plot
+pl_pyramid_vi <-  
+  ggplot(df_pl_vi_pyramid, aes(x = pct_of_pop,
+           y = age_grp,
+           fill = gender
+           )) + 
+  geom_col() +
+  theme_classic() +
+  scale_fill_manual(
+    values=c("#0F5A27", "#107F8A"),
+    labels=c("percent men", "percent women")
+    )  +
+  xlab("percent of population") +
+  ylab(NULL)
+
+#pl_pyramid_vi
+
+# fix scale numbering
+
+pop_range_breaks <- seq(-8, 8, by = 2)
+
+pl_pyramid_vi +
+   scale_x_continuous(breaks  = pop_range_breaks,
+#                      limits = c(min(pop_range_breaks), max(pop_range_breaks)),
+                      limits = c(-9, 9),
+                       labels = abs(pop_range_breaks))  +
+  labs(
+    title = "Vancouver Island",
+    caption = "Census 2021: Statistics Canada"
+  ) +
+  theme(legend.position = "bottom")
+  
+  
+
+
+ggsave("plot_output/pyramid_van_isl_2021.jpg",
+       width = 13.333,
+       height = 7.5
+  )
+
+
+```
+
+grey scale bars
+
+
+```{r}
+
+# and plot
+pl_pyramid_vi <-  
+  ggplot(df_pl_vi_pyramid, aes(x = pct_of_pop,
+           y = age_grp,
+           fill = gender
+           )) + 
+  geom_col(
+    colour = "#E5E5E3",
+    fill = "#E5E5E3", alpha = 0.33 
+) +
+  theme_classic() +
+   scale_x_continuous(breaks  = pop_range_breaks,
+                       labels = abs(pop_range_breaks))  
+
+pl_pyramid_vi
+
+#ggsave("plot_output/pyramid_van_isl_2021_grey.jpg")
+
+```
+
+
+### pop pyramid: csd
+
+prep for plot
+
+```{r}
+df_pop_pyramid_csd <- df_pop_csd_vi_5yr |> 
+  select(-contains("total"),
+         -contains("pct_age_grp")) |> 
+  # set value of men to negative
+  mutate(
+    pop_men = -pop_men,
+    pct_men = -pct_men
+  ) |> 
+  pivot_longer(-c(geo_name:age_grp), names_to = "gender", values_to = "pop_2021") 
+
+df_pop_pyramid_csd
+```
+
+```{r}
+
+# list of place names in "geo"
+community_names <- df_pop_pyramid_csd |> 
+  distinct(geo_name, dguid, geo_cd, geo_csd) |> 
+  arrange(geo_name)
+
+community_names
+
+
+```
+
+
+### plot community
+
+```{r}
+# for some communities (eg Esquimalt) need to specify CSD number in filter 
+# (due to duplication of name in CSD name) 
+
+community_name <- "Comox Valley C (Puntledge - Black Creek)"
+geo_csd_num <- "024"
+
+
+df_pop_pyramid_community <- 
+  df_pop_pyramid_csd |> 
+  filter(case_when(
+    community_name == community_name ~
+    geo_name == community_name & geo_csd == geo_csd_num,
+    TRUE ~ geo_name == community_name
+  ))
+    
+
+### ---  
+
+# now plot: total population
+pl_pyramid_csd <- df_pop_pyramid_community |> 
+  # filter for pop or pct
+  filter(str_detect(gender, "pop")) |> 
+
+ggplot(
+  aes(x = pop_2021,
+           y = age_grp,
+           fill = gender)) + 
+  geom_col()
+
+# pl_pyramid_csd
+
+# fix scale numbering
+
+pop_range <- range(df_pop_pyramid_community$pop_2021)
+pop_range
+
+pop_range_breaks <- pretty(pop_range)
+
+pl_pyramid_csd +
+   scale_x_continuous(breaks  = pop_range_breaks,
+                       labels = abs(pop_range_breaks)) +
+  theme_light()
+
+
+```
+
+
+
+### overlay VI region
+
+This uses percent of total population, comparing the specified community with all of the regional districts in the Vancouver Island region
+
+
+```{r}
+pl_pyramid_csd <- 
+ df_pop_pyramid_community |> 
+  # filter for pop or pct
+  filter(str_detect(gender, "pct")) |> 
+
+
+  # now plot
+ggplot( 
+       aes(x = pop_2021,
+           y = age_grp,
+           fill = gender)) + 
+  geom_col() +
+  theme_classic() +
+  scale_fill_manual(
+    values=c("#0F5A27", "#107F8A"),
+    labels=c("percent men", "percent women")
+    )  +
+  xlab("percent of population") +
+  ylab(NULL)
+
+
+# fix scale numbering
+pop_range_breaks <- seq(-8, 8, by = 2)
+pl_pyramid_csd <- pl_pyramid_csd +
+   scale_x_continuous(breaks  = pop_range_breaks,
+#                      limits = c(min(pop_range_breaks), max(pop_range_breaks)),
+                      limits = c(-9, 9),
+                       labels = abs(pop_range_breaks))  
+
+### ---
+
+# overlay region as transparent grey
+
+# overlay region
+pl_pyramid_csd_region <- 
+  pl_pyramid_csd +
+  geom_col(
+    aes(
+      x = df_pl_vi_pyramid$pct_of_pop, 
+      y = df_pl_vi_pyramid$age_grp,
+      colour = gender 
+      ),
+    colour = "#E5E5E3",
+    size = 0.75,
+    fill = "#E5E5E3", alpha = 0.33 
+    )
+
+# add title
+pl_pyramid_csd_region <- pl_pyramid_csd_region +
+  labs(
+    title = community_name,
+    caption = "Census 2021: Statistics Canada"
+  )
+  
+
+
+pl_pyramid_csd_region
+
+ggsave(glue("plot_output/pyramid_{community_name}_2021.jpg"))
+
+```
+
+
+## pop pyramid function
+
+```{r pop_pyramid_fun}
+
+pop_pyramid_fun <- function(community_name, geo_csd_num){
+
+
+df_pop_pyramid_community <- 
+  df_pop_pyramid_csd |> 
+  filter(case_when(
+    community_name == community_name ~
+    geo_name == community_name & geo_csd == geo_csd_num,
+    TRUE ~ geo_name == community_name
+  ))
+    
+
+### ---  
+
+# now plot: total population
+pl_pyramid_csd <- df_pop_pyramid_community |> 
+  # filter for pop or pct
+  filter(str_detect(gender, "pop")) |> 
+
+ggplot(
+  aes(x = pop_2021,
+           y = age_grp,
+           fill = gender)) + 
+  geom_col()
+
+# pl_pyramid_csd
+
+# fix scale numbering
+
+pop_range <- range(df_pop_pyramid_community$pop_2021)
+#pop_range
+
+pop_range_breaks <- pretty(pop_range)
+
+pl_pyramid_csd +
+   scale_x_continuous(breaks  = pop_range_breaks,
+                       labels = abs(pop_range_breaks)) +
+  theme_light()
+
+
+## overlay region
+
+pl_pyramid_csd <- 
+ df_pop_pyramid_community |> 
+  # filter for pop or pct
+  filter(str_detect(gender, "pct")) |> 
+  # now plot
+ggplot( 
+       aes(x = pop_2021,
+           y = age_grp,
+           fill = gender)) + 
+  geom_col() +
+  theme_classic() +
+  scale_fill_manual(
+    values=c("#0F5A27", "#107F8A"),
+    labels=c("percent men", "percent women")
+    )  +
+  xlab("percent of population") +
+  ylab(NULL)
+
+
+# fix scale numbering
+pop_range_breaks <- seq(-8, 8, by = 2)
+pl_pyramid_csd <- pl_pyramid_csd +
+   scale_x_continuous(breaks  = pop_range_breaks,
+#                      limits = c(min(pop_range_breaks), max(pop_range_breaks)),
+                      limits = c(-9, 9),
+                       labels = abs(pop_range_breaks))  
+
+### ---
+
+# overlay region as transparent grey
+
+# overlay region
+pl_pyramid_csd_region <- 
+  pl_pyramid_csd +
+  geom_col(
+    aes(
+      x = df_pl_vi_pyramid$pct_of_pop, 
+      y = df_pl_vi_pyramid$age_grp,
+      colour = gender 
+      ),
+    colour = "#E5E5E3",
+    size = 0.75,
+    fill = "#E5E5E3", alpha = 0.33 
+    )
+
+# add title
+pl_pyramid_csd_region <- pl_pyramid_csd_region +
+  labs(
+    title = community_name,
+    caption = "Census 2021: Statistics Canada"
+  ) +
+  theme(legend.position = "bottom")
+  
+
+return(pl_pyramid_csd_region)
+
+#ggsave(glue("plot_output/pyramid_{community_name}_2021.jpg"), 
+#       pl_pyramid_csd_region,
+#       width = 9,
+#       height = 6)
+
+}
+
+```
+
+
+### run function
+
+```{r}
+# for some communities (eg Esquimalt) need to specify CSD number in filter 
+# (due to duplication of name in CSD name) 
+
+community_name <- "Comox Valley C (Puntledge - Black Creek)"
+geo_csd_num <- "024"
+
+pop_pyramid_fun(community_name, geo_csd_num)
+
+```
+
+
+loop
+
+```{r}
+# for some communities (eg Esquimalt) need to specify CSD number in filter 
+# (due to duplication of name in CSD name) 
+
+community_list <- tribble(
+  ~community_name, ~geo_csd_num,
+  "Cumberland", "014",
+  "Courtenay", "010",
+  "Comox", "005",
+  "Comox Valley A", "021",
+  "Comox Valley B (Lazo North)", "022",
+  "Comox Valley C (Puntledge - Black Creek)", "024"
+)
+
+
+vi_community_plots <- df_pop_pyramid_csd |> 
+  filter(geo_name %in% community_list$community_name) |> 
+  distinct(geo_name, geo_cd, geo_csd)
+
+vi_community_plots <- df_pop_pyramid_csd |> 
+  filter(geo_name == "Langford") |> 
+  distinct(geo_name, geo_cd, geo_csd)
+
+
+vi_community_plots
+
+```
+
+
+```{r}
+#plot_list <- vector(mode = "list", length = nrow(vi_community_plots))
+
+plot_count <- nrow(vi_community_plots)
+
+for (i in 1:nrow(vi_community_plots)) {
+#for (i in 1:plot_count) {
+#  i <- 6
+   community_name = vi_community_plots$geo_name[i]
+   geo_cd_num <- vi_community_plots$geo_cd[i]
+   geo_csd_num = vi_community_plots$geo_csd[i]
+   plot_temp <- pop_pyramid_fun(community_name, geo_csd_num)
+   plot_temp 
+   
+  ggsave(
+    filename = 
+      glue::glue("plot_output/pyramid_cd{geo_cd_num}_csd{geo_csd_num}_{community_name}_2021.jpg"), 
+       plot_temp,
+       width = 13.333,
+       height = 7.5
+    )
+
+}
+
+```
+
+
+stackoverflow 
+`local({})`
+https://stackoverflow.com/questions/31993704/storing-ggplot-objects-in-a-list-from-within-loop-in-r
+
+
+
+```{r}
+
+plot_list <- vector(mode = "list", length = nrow(vi_community_plots))
+
+for (i in nrow(vi_community_plots)) {
+#  i = 3
+   plot_list[[i]] <- local({
+     i <- i
+     pop_pyramid_fun(vi_community_plots$community_name[i], vi_community_plots$geo_csd_num[i])
+   
+   ggsave(glue("plot_output/pyramid_{community_name_i}_2021.jpg"), 
+       plot = plot_list[[i]],
+       width = 9,
+       height = 6)
+   })
+
+
+}
+
+
+```
+
+
+
+```{r}
+
+plot_list <- vector(mode = "list", length = nrow(vi_community_plots))
+
+for (i in nrow(vi_community_plots)) {
+  i = i
+   temp_plot <- 
+     pop_pyramid_fun(vi_community_plots$community_name[[i]], vi_community_plots$geo_csd_num[[i]])
+   
+   plot_list[[i]] <- temp_plot
+}
+
+
+for (i in nrow(vi_community_plots)) {
+   ggsave(
+     file = glue("plot_output/pyramid_{vi_community_plots$community_name[i]}_2021.jpg"), 
+       plot = plot_list[[i]],
+       width = 9,
+       height = 6
+     )
+}
+
+```
+
+
+### test
+
+https://community.rstudio.com/t/saving-multiple-ggplot-objects-in-a-list-array-etc-from-a-for-loop-then-printing-saving-etc-later/126055/2
+
+```{r}
+library(ggplot2)
+data("iris")
+
+# list of values to loop over
+  uniq_species = unique(iris$Species)
+
+
+# Loop
+
+for (i in uniq_species) {
+
+  temp_plot = ggplot(data= subset(iris, Species == i)) + 
+                  geom_point(size=3, aes(x=Petal.Length, y=Petal.Width )) +
+                  ggtitle(i)
+
+  ggsave(temp_plot, file=paste0("plot_", i,".png"), width = 14, height = 10, units = "cm")
+}
+
+
+```
+
+
+mods
+
+```{r}
+# list of values to loop over
+uniq_community = unique(community_name)
+
+
+# Loop
+
+for (i in uniq_community) {
+  i = 2
+  
+  community_name_i <- vi_community_plots$community_name[[i]]
+  geo_csd_num_i <- vi_community_plots$geo_csd_num[[i]]
+  
+  df_pop_pyramid_community <-
+    df_pop_pyramid_csd |>
+    filter(
+      case_when(
+        community_name == community_name_i ~
+          geo_name == community_name & geo_csd == geo_csd_num,
+        TRUE ~ geo_name == community_name
+      )
+    )
+```
+
+
+```{r}
+### ---
+  
+  # now plot: total population
+  pl_pyramid_csd <- df_pop_pyramid_community |>
+    # filter for pop or pct
+    filter(str_detect(gender, "pop")) |>
+    
+    ggplot(aes(x = pop_2021,
+               y = age_grp,
+               fill = gender)) +
+    geom_col()
+  
+  # pl_pyramid_csd
+  
+  # fix scale numbering
+  
+  pop_range <- range(df_pop_pyramid_community$pop_2021)
+  #pop_range
+  
+  pop_range_breaks <- pretty(pop_range)
+  
+  pl_pyramid_csd +
+    scale_x_continuous(breaks  = pop_range_breaks,
+                       labels = abs(pop_range_breaks)) +
+    theme_light()
+  
+  
+  ## overlay region
+  
+  pl_pyramid_csd <-
+    df_pop_pyramid_community |>
+    # filter for pop or pct
+    filter(str_detect(gender, "pct")) |>
+    # now plot
+    ggplot(aes(x = pop_2021,
+               y = age_grp,
+               fill = gender)) +
+    geom_col() +
+    theme_classic() +
+    scale_fill_manual(
+      values = c("#0F5A27", "#107F8A"),
+      labels = c("percent men", "percent women")
+    )  +
+    xlab("percent of population") +
+    ylab(NULL)
+  
+  
+  # fix scale numbering
+  pop_range_breaks <- seq(-8, 8, by = 2)
+  pl_pyramid_csd <- pl_pyramid_csd +
+    scale_x_continuous(
+      breaks  = pop_range_breaks,
+      #                      limits = c(min(pop_range_breaks), max(pop_range_breaks)),
+      limits = c(-9, 9),
+      labels = abs(pop_range_breaks)
+    )
+  
+  ### ---
+  
+  # overlay region as transparent grey
+  
+  # overlay region
+  pl_pyramid_csd_region <-
+    pl_pyramid_csd +
+    geom_col(
+      aes(
+        x = df_pl_vi_pyramid$pct_of_pop,
+        y = df_pl_vi_pyramid$age_grp,
+        colour = gender
+      ),
+      colour = "#E5E5E3",
+      size = 0.75,
+      fill = "#E5E5E3",
+      alpha = 0.33
+    )
+  
+  # add title
+  pl_pyramid_csd_region <- pl_pyramid_csd_region +
+    labs(title = community_name,
+         caption = "Census 2021: Statistics Canada") +
+    theme(legend.position = "bottom")
+  
+  
+  temp_plot <- pl_pyramid_csd_region
+  
+  ggsave(
+    temp_plot,
+    file = paste0("plot_output/plot_", i, ".jpg"),
+    width = 14,
+    height = 10,
+    units = "cm"
+  )
+  
+}
+
+
+```
+

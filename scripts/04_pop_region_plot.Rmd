@@ -1,0 +1,57 @@
+---
+title: "median age"
+author: "Martin Monkman"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+```
+
+```{r}
+df_pop_csd_detail <- read_rds(here::here("data_statcan", "98100023.rds"))
+
+```
+
+```{r}
+
+#"2021A00055926005"
+
+# Comox Valley Census Division (Regional District)
+cd_num <- "5926"
+
+
+pop_total_region <- df_pop_csd_detail |> 
+  filter(
+    age_in_single_years_average_age_and_median_age_128 == "Total - Age"
+  ) |> 
+  ## filter for all CSDs in CD
+  filter(
+    str_detect(dguid, "2021A000559260")
+  ) |> 
+  ## subtract Indian Reserves and other First Nations communities
+  filter(
+    !str_detect(dguid, "8\\d\\d$")
+  ) 
+
+pop_total_region
+
+```
+
+
+
+```{r}
+ggplot(pop_total_region, aes(x = geo, y = gender_3_total_gender_1)) + 
+  geom_col() +
+  coord_flip()
+
+ggsave(here::here("plot_output", "comox_valley_rd_csd_bar.png"),
+       width = 1200, height = 675,
+       units = "px")  
+
+```
+
