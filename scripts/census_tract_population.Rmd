@@ -1,0 +1,757 @@
+---
+title: "census tract"
+subtitle: "population 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: inline
+---
+
+## `cancensus` - an introduction
+
+** [`cancensus` github repo](https://github.com/mountainMath/cancensus) **
+
+
+** [`cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html)
+
+
+> **NOTE**
+> After an initial request to the cancensus server, all data is saved in the cache folder "cache_census". In other words, subsequent calls are to the local drive
+> The cache location and other environment parameters are set in the file "cancensus_setup.R"
+
+
+```{r setup}
+
+# tidyverse
+library(tidyverse)
+library(here)
+
+# cancensus
+
+# (This is not necessary - `cancensus` is on CRAN now!)
+#devtools::install_github("mountainMath/cancensus")
+
+library(cancensus)
+
+
+# cancensus
+source(here::here("scripts", "cancensus_setup.R"))
+
+# MNP plot format etc
+source(here::here("scripts", "mnp_defaults_ggplot.R"))
+
+```
+
+
+
+```{r}
+
+# set API key (stored in text file "secretAPI.txt")
+secretAPI <- readLines(here("scripts", "secretAPI.txt"))
+
+options(cancensus.api_key = secretAPI)
+
+```
+
+
+```{r}
+#set list of CSD names
+
+CSD_master <- read_csv(
+  here("geosuite", "2021_92-150-X_eng", "CSD.csv"),
+  col_types =
+    cols(CSDuid = col_character(),
+         SACtype  = col_character())
+)
+
+```
+
+
+***
+
+Start exploring the data
+(straight from [the `cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html))
+
+
+
+
+```{r}
+
+# To view available Census datasets
+census_datasets <- list_census_datasets()
+census_datasets
+
+```
+
+
+
+####Regions
+
+```{r}
+
+# To view available named regions at different levels of Census hierarchy for the 2016 Census (for example)
+#census_regions <- list_census_regions("CA16")
+census_regions <- list_census_regions("CA21")
+
+
+# filters: 
+#   "^" is equivalent to "starts with"
+#   "$" is equivalent to "ends with"
+#   "." is a single character wild card
+
+census_regions %>%
+  filter(grepl("^59", region) )
+
+census_regions %>%
+  filter(grepl("^59", region),
+         level == "CMA")
+
+```
+
+
+#### Population vectors 2021
+
+
+```{r}
+
+# To view available Census variables for the 2021 Census
+# NOTE: there are 7,709 in total!!!
+
+census_vectors <- list_census_vectors("CA21")
+#write_csv(census_vectors, here("data_census", "census_vectors_CA21.csv"))
+
+census_vectors
+
+```
+
+
+This list shows the vector numbers for the 2021 Census related to population
+
+
+vector	type	label	units	parent_vector
+v_CA21_1	Total	Population, 2021	Number	NA
+v_CA21_2	Total	Population, 2016	Number	NA
+v_CA21_3	Total	Population percentage change, 2016 to 2021	Number	NA
+v_CA21_4	Total	Total private dwellings	Number	NA
+v_CA21_5	Total	Private dwellings occupied by usual residents	Number	v_CA21_4
+v_CA21_6	Total	Population density per square kilometre	Ratio	NA
+v_CA21_7	Total	Land area in square kilometres	Number	NA
+v_CA21_8	Total	Total - Age	Number	NA
+v_CA21_9	Male	Total - Age	Number	NA
+v_CA21_10	Female	Total - Age	Number	NA
+
+
+
+```{r}
+# list of vectors with the 2021 Census data 
+vector_list <- c(
+  "v_CA21_1", 
+  "v_CA21_2", 
+  "v_CA21_3",
+  "v_CA21_4",
+  "v_CA21_5", 
+  "v_CA21_6", 
+  "v_CA21_7",
+  "v_CA21_8" 
+  )
+
+
+```
+
+
+
+## Vancouver CMA 933
+
+```{r data_files_933}
+
+# CENSUS SUB-DIVISIONS
+
+# Return data only
+census_data <- get_census(dataset='CA21', regions=list(CMA="59933"), vectors=vector_list, level='CSD')
+
+# Return an sf-class data frame
+census_data_sf <- get_census(dataset='CA21', regions=list(CMA="59933"), vectors=vector_list, level='CSD', geo_format = "sf")
+
+# Return a SpatialPolygonsDataFrame
+census_data_sp <- get_census(dataset='CA21', regions=list(CMA="59933"), vectors=vector_list, level='CSD', geo_format = "sp")
+
+
+
+# CENSUS TRACTS
+
+# Return data only
+census_data <- get_census(dataset='CA21', regions=list(CMA="59933"), vectors=vector_list, level='CT')
+
+# Return an sf-class data frame
+census_data_sf <- get_census(dataset='CA21', regions=list(CMA="59933"), vectors=vector_list, level='CT', geo_format = "sf")
+
+# Return a SpatialPolygonsDataFrame
+census_data_sp <- get_census(dataset='CA21', regions=list(CMA="59933"), vectors=vector_list, level='CT', geo_format = "sp")
+
+```
+
+
+
+### census tract data
+
+```{r}
+
+# filters: 
+#   "^" is equivalent to "starts with"
+#   "$" is equivalent to "ends with"
+#   "." is a single character wild card
+
+# Return data only
+# Return data only
+data_CA21_933_CSD <- get_census(dataset = 'CA21', 
+                          regions = list(CMA = "59933"),
+                          vectors = vector_list, 
+                          labels = "short", 
+                          level = 'CSD')
+
+data_CA21_933_CT <- get_census(dataset = 'CA21', 
+                          regions = list(CMA = "59933"),
+                          vectors = vector_list, 
+                          labels = "short", 
+                          level = 'CT')
+
+
+head(data_CA21_933_CT)
+
+#write_csv(data_CA21_933_CT, here("cancensus", "data", "data_CA21_933_CT_vCA16_2397.csv"))
+
+data_CA21_933_DA <- get_census(dataset='CA21', regions=list(CMA="59933"),
+                          vectors = vector_list, labels = "short", level='DA')
+
+
+```
+
+
+```{r}
+
+# unique CSD (municipality) values
+
+csd_933 <- as_tibble(unique(data_CA21_933_CT$CSD_UID))
+
+# join CSD names
+
+
+
+data_CA21_933_CT <- data_CA21_933_CT %>% 
+  left_join(CSD_master, by = c("CSD_UID" = "CSDuid"))
+
+
+
+
+```
+
+
+
+```{r read_write_midstream}
+
+#write_rds(data_CA21_933_CT, here("data_census", "data_CA21_933_CT_population.rds"))
+#write_csv(data_CA21_933_CT, here("data_census", "data_CA21_933_CT_population.csv"))
+
+#data_CA21_933_CT <- read_rds(here("data_census", "data_CA21_933_CT_population.rds"))
+
+
+```
+
+
+
+### mapping
+
+
+```{r}
+# retrieve sf dataframe
+vancouver_cma <- get_census(dataset='CA21', regions=list(CMA="59933"),
+                         vectors=c(vector_list), level='CT', quiet = TRUE, 
+                         geo_format = 'sf', labels = 'short')
+
+vancouver_cma <- vancouver_cma %>% 
+  left_join(CSD_master, by = c("CSD_UID" = "CSDuid"))
+  
+#write_rds(vancouver_cma, here("data_census", "vancouver_cma_2021.rds"))
+
+
+
+```
+
+
+```{r read_vancouver_cma_2021}
+
+#vancouver_cma <- read_rds(here("data_census", "vancouver_cma_2021.rds"))
+
+```
+
+
+```{r}
+
+plot_data <- vancouver_cma
+fill_var <- "v_CA21_6"
+
+ggplot(plot_data) + 
+  geom_sf(aes(fill = v_CA21_6))
+
+map_cma <- 
+ggplot(plot_data) + 
+  geom_sf(aes(fill = v_CA21_6)) +
+  coord_sf(
+    xlim = c(-122.66, -123.26),
+    ylim = c(48.95, 49.3))
+
+map_cma
+
+```
+
+
+viridis 1
+
+```{r}
+
+ggplot(vancouver_cma) +
+  geom_sf(aes(fill = v_CA21_6), colour = "grey") +
+  scale_fill_gradient(
+    low = "#eef0f2",
+    high = "#0c3343",
+    name = "population density, 2021", 
+    labels = scales::comma
+    ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    legend.position = c(0.2, 0.75)
+  ) +
+  coord_sf(datum = NA) 
+
+#  labs(title = "Median After-tax Income of Couple-Families with Children in 2015", subtitle = "Victoria CMA Census Tracts, 2016 Census")
+
+# ggsave(here("plot_output", "map01_income.png"))
+
+```
+
+crop
+
+```{r}
+
+ggplot(vancouver_cma) +
+  geom_sf(aes(fill = v_CA21_6), colour = "grey") +
+  # crop
+  coord_sf(xlim = c(-123.18,-123.05),
+           ylim = c(49.32, 49.25)) +
+  
+#  scale_fill_viridis_c("Median HH Income", labels = scales::dollar) +
+  scale_fill_gradient(
+    low = "#eef0f2",
+    high = "#0c3343",
+     name = "persons per sq.km, 2021", 
+    labels = scales::comma
+   ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  ) 
+
+#+
+  #coord_sf(datum = NA) +
+#  labs(title = "Number of children ages 5–12", subtitle = "Victoria CMA Census Subdivisions, 2021 Census")
+
+```
+
+zooming in: https://www.r-bloggers.com/2019/04/zooming-in-on-maps-with-sf-and-ggplot2/
+
+
+### Langley
+
+
+Langley 2021
+
+```{r Langley_population_density}
+
+
+vancouver_cma %>% 
+  distinct(CSDname, CSDtype)
+
+langley_dm <- vancouver_cma %>% 
+  filter(CSDname == "Langley" & CSDtype == "DM") %>% 
+  rename(
+    "population_2021" = Population,
+    "population_2016" = `Population 2016`
+    ) 
+
+langley_dm <- langley_dm %>% 
+  mutate(
+    pop_density_2021 = population_2021 / `Shape Area`,
+    pop_density_2016 = population_2016 / `Shape Area`
+  )
+
+
+min(langley_dm$v_CA21_6)
+max(langley_dm$v_CA21_6)
+
+```
+
+
+
+```{r}
+
+# plot  
+ch_pop_density_2021 <- ggplot(langley_dm) +
+  geom_sf(aes(fill = v_CA21_6), colour = "grey") +
+  #
+  scale_fill_gradient(
+    low = "#eef0f2",
+    high = "#0c3343",
+    limits = c(80, 4000),
+     name = "persons per sq.km", 
+    labels = scales::comma
+   ) +
+  theme_light() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  ) +
+  labs(
+    title = "Township of Langley (District Municipality)",
+    caption = "Source: Statistics Canada, Census 2021",
+    subtitle = "Population density, 2021"
+  )
+
+#ggsave(here("outputs", "Langley_DM_pop_density_CT_2021.png"))
+#ggsave(here("outputs", "Langley_DM_pop_density_CT_2021.jpg"))
+
+ch_pop_density_2021
+
+```
+
+
+Langley 2016
+
+```{r Langley_population_density_2016}
+
+#ls.str(langley_dm)  
+
+#min(langley_dm$pop_density_2016)
+#max(langley_dm$pop_density_2016)
+
+
+# plot  
+ch_pop_density_2016 <-
+ggplot(langley_dm) +
+  geom_sf(aes(fill = pop_density_2016), colour = "grey") +
+#  geom_sf(aes(fill = pop_density_2016), show.legend = FALSE) +
+
+  scale_fill_gradient(
+    low = "#eef0f2",
+    high = "#0c3343",
+    limits = c(80, 4000),
+     name = "persons per sq.km", 
+    labels = scales::comma
+   ) +
+  theme_light() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  ) +
+  labs(
+    title = "Township of Langley (District Municipality)",
+    caption = "Source: Statistics Canada, Census 2016",
+    subtitle = "Population density, 2016"
+  )
+
+#ggsave(here("outputs", "Langley_DM_pop_density_CT_2016.png"))
+#ggsave(here("outputs", "Langley_DM_pop_density_CT_2016.jpg"))
+
+ch_pop_density_2016
+
+```
+
+#### Langley 2016 & 2021
+
+```{r}
+
+gridExtra::grid.arrange(
+  ch_pop_density_2016, 
+  ch_pop_density_2021, 
+  ncol = 2
+  )
+
+```
+
+
+facet for years
+
+```{r}
+
+#ls.str(langley_dm)
+
+langley_dm_long <- langley_dm %>% 
+  select(GeoUID, geometry, pop_density_2021, pop_density_2016) %>% 
+  pivot_longer(
+    cols = c(pop_density_2021, pop_density_2016),
+    names_to = "census_year",
+    names_prefix = "pop_density_",
+    values_to = "pop_density"
+  )
+
+langley_dm_long
+
+```
+
+
+
+```{r}
+
+# plot  
+ch_pop_density_both <- ggplot(langley_dm_long) +
+  geom_sf(aes(fill = pop_density), colour = "grey") +
+  facet_wrap(~ census_year) +
+  #
+  scale_fill_gradient(
+    low = "#eef0f2",
+    high = "#0c3343",
+    limits = c(80, 4000),
+     name = "persons per sq.km", 
+    labels = scales::comma
+   ) +
+  theme_light() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  ) +
+  labs(
+    title = "Township of Langley (District Municipality)",
+    caption = "Source: Statistics Canada, Census 2021",
+    subtitle = "Population density, 2016 & 2021"
+  )
+
+#ggsave(here("outputs", "Langley_DM_pop_density_CT__2016_2021.png"))
+#ggsave(here("outputs", "Langley_DM_pop_density_CT__2016_2021.jpg"))
+
+ch_pop_density_both
+
+```
+
+
+## Nanaimo CMA 938
+
+```{r data_files_938}
+# CENSUS SUB-DIVISIONS
+
+cma_num <- "59938"
+
+# Return data only
+census_data <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD')
+
+# Return an sf-class data frame
+census_data_sf <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD', geo_format = "sf")
+
+# Return a SpatialPolygonsDataFrame
+census_data_sp <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD', geo_format = "sp")
+```
+
+
+```{r data_files_938_CT}
+# CENSUS TRACTS
+
+
+cma_num <- "59938"
+
+
+# Return data only
+census_data <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CT')
+
+# Return an sf-class data frame
+census_data_sf <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CT', geo_format = "sf")
+
+# Return a SpatialPolygonsDataFrame
+census_data_sp <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CT', geo_format = "sp")
+
+```
+
+mapping
+
+```{r}
+
+
+
+cma_num <- "59938"
+
+
+# retrieve sf dataframe
+nanaimo_cma <- get_census(dataset='CA21', regions=list(CMA=cma_num),
+                         vectors=c(vector_list), level='CT', quiet = TRUE, 
+                         geo_format = 'sf', labels = 'short')
+
+nanaimo_cma <- nanaimo_cma %>% 
+  left_join(CSD_master, by = c("CSD_UID" = "CSDuid"))
+  
+#write_rds(nanaimo_cma, here("data_census", "nanaimo_cma_2021.rds"))
+
+
+
+```
+
+
+```{r read_nanaimo_cma}
+
+#nanaimo_cma <- read_rds(here("data_census", "nanaimo_cma_2021.rds"))
+
+```
+
+
+v_CA21_3 == percent population change
+
+```{r}
+
+plot_data <- nanaimo_cma
+fill_var <- v_CA21_3
+
+ggplot(plot_data) + 
+  geom_sf(aes(fill = v_CA21_3))
+
+map_cma <- 
+ggplot(plot_data) + 
+  geom_sf(aes(fill = v_CA21_3)) +
+  coord_sf(xlim = c(-124.1,-123.9),
+           ylim = c(49.1, 49.3)) 
+
+map_cma
+
+```
+
+
+viridis 1
+
+population density
+
+```{r}
+
+ggplot(nanaimo_cma) +
+  geom_sf(aes(fill = v_CA21_3), colour = "grey") +
+  scale_fill_gradient(
+    low = "#eef0f2",
+    high = "#0c3343",
+    name = "population: percent change\n2016–2021", 
+    labels = scales::comma
+    ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    legend.position = c(0.2, 0.75)
+  ) +
+  coord_sf(datum = NA) 
+
+#  labs(title = "Median After-tax Income of Couple-Families with Children in 2015", subtitle = "Victoria CMA Census Tracts, 2016 Census")
+
+ggsave(here("plot_output", "cma938_2021_popchange.jpg"))
+
+```
+
+crop
+
+```{r}
+
+ggplot(nanaimo_cma) +
+  geom_sf(aes(fill = v_CA21_3), colour = "grey") +
+  # crop
+  coord_sf(xlim = c(-124.1,-123.9),
+           ylim = c(49.1, 49.3)) +
+  
+  scale_fill_gradient(
+    low = "#eef0f2",
+    high = "#0c3343",
+     name = "percent population change, 2016–2021", 
+    labels = scales::comma
+   ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  ) 
+
+
+
+```
+
+
+
+```{r}
+nanaimo_cma_urban <- nanaimo_cma |> 
+  mutate(pop_change_net = Population - `Population 2016`) |> 
+  filter(name != "0020.00")
+```
+
+
+population change: percent
+
+```{r}
+ggplot(nanaimo_cma_urban) +
+  geom_sf(aes(fill = v_CA21_3), colour = "grey") +
+  # crop
+  coord_sf(xlim = c(-124.2,-123.7),
+           ylim = c(49.00, 49.3)) +
+  
+  scale_fill_gradient2(
+    low = "#ef5a27",
+    high = "#0c3343",
+     name = "Population:\npercent change\n2016–2021", 
+    labels = scales::comma
+   ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  ) 
+
+
+ggsave(here("plot_output", "cma938_2021_popchange_pct_urban.jpg"))
+
+
+```
+
+```{r}
+ggplot(nanaimo_cma_urban) +
+  geom_sf(aes(fill = pop_change_net), colour = "grey") +
+  # crop
+  coord_sf(xlim = c(-124.2,-123.7),
+           ylim = c(49.00, 49.3)) +
+  
+  scale_fill_gradient2(
+    low = "#ef5a27",
+    high = "#0c3343",
+     name = "Population:\nnet change\n2016–2021", 
+    labels = scales::comma
+   ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  ) 
+
+
+ggsave(here("plot_output", "cma938_2021_popchange_urban.jpg"))
+
+
+```
+
+
+zooming in: https://www.r-bloggers.com/2019/04/zooming-in-on-maps-with-sf-and-ggplot2/
+
+
+### -30-
+

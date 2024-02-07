@@ -94,14 +94,19 @@ DOI: https://doi.org/10.25318/9810002301-eng
 
 
 ```{r}
-
-
 df_pop_csd_detail <- read_csv(here::here("data_statcan", "98100023.csv")) |> 
   janitor::clean_names()
 
 write_rds(df_pop_csd_detail, here::here("data_statcan", "98100023.rds"))
-
 ```
+
+
+```{r}
+df_pop_csd_detail <- read_rds(here::here("data_statcan", "98100023.rds"))
+df_pop_csd_detail
+```
+
+## CSD - BC
 
 ```{r}
 df_pop_csd_bc <- df_pop_csd_detail |> 
@@ -123,6 +128,14 @@ df_pop_csd_bc <- df_pop_csd_detail |>
 #  # geo type
 #  mutate(geo_type = str_match(geo, " \\D+$")) |> 
 #  mutate(geo_type = str_trim(geo_type))
+
+
+# separate CD and CSD values
+df_pop_csd_bc <- df_pop_csd_bc |> 
+  # geocode with parenthesis
+  mutate(geo_cd = as.character(str_sub(dguid, start = 12, end = 13)))  |> 
+  mutate(geo_csd = as.character(str_sub(dguid, start = 14, end = 16))) 
+
 
 # separate CD and CSD values
 df_pop_csd_bc <- df_pop_csd_bc |> 
@@ -241,3 +254,34 @@ write_csv(df_pop_csd_vi_5yr, "data_statcan/df_pop_csd_vi_5yr.csv")
 
 
 ```
+
+
+## CD - BC
+
+```{r}
+df_pop_cd_comox <- df_pop_csd_detail |> 
+  filter(str_detect(dguid, "2021A00035926"))
+
+df_pop_cd_comox
+
+```
+
+```{r}
+df_pop_cd_comox_5yr <- df_pop_cd_comox |> 
+  filter(age_in_single_years_average_age_and_median_age_128 %in%
+           five_year_bins) |> 
+  rename(
+    age_grp = age_in_single_years_average_age_and_median_age_128,
+    pop_total = gender_3_total_gender_1,
+    pop_men = gender_3_men_2,
+    pop_women = gender_3_women_3
+) |> 
+  mutate(age_grp = as_factor(age_grp))
+
+levels(df_pop_cd_comox_5yr$age_grp)
+
+#write_rds(df_pop_cd_comox_5yr, here::here("data_statcan", "df_pop_cd_comox_5yr.rds"))
+
+
+```
+

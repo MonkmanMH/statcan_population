@@ -1,0 +1,43 @@
+---
+title: "Census vectors etc"
+author: "Martin Monkman"
+date: "2023-12-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+# tidyverse
+library(tidyverse)
+library(here)
+
+# cancensus
+library(cancensus)
+source(here::here("scripts", "cancensus_setup.R")) # includes API key
+
+# MNP plot format etc
+source(here::here("scripts", "mnp_defaults_ggplot.R"))
+
+```
+
+
+
+
+```{r}
+
+# To view available Census variables for the 2021 Census
+# NOTE: there are 7,709 in total!!!
+
+census_vectors_CA21 <- list_census_vectors("CA21")
+#write_csv(census_vectors, here("data_census", "census_vectors_CA21.csv"))
+
+census_vectors_CA21
+
+write_rds(census_vectors_CA21, here("data_census", "census_vectors_CA21.rds"))
+write_csv(census_vectors_CA21, here("data_census", "census_vectors_CA21.csv"))
+
+
+```
+

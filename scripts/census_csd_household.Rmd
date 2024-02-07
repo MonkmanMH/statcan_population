@@ -1,0 +1,415 @@
+---
+title: "Census: households by Census Subdivisions"
+subtitle: "2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: inline
+---
+
+## CENSUS HOUSEHOLDS
+
+**Defintions etc**
+
+https://www23.statcan.gc.ca/imdb/p3Var.pl?Function=Unit&Id=32746
+
+https://www23.statcan.gc.ca/imdb/p3Var.pl?Function=DEC&Id=251053#:~:text=Census%20family%20households%20are%20those,not%20constitute%20a%20census%20family.
+
+
+"Other Census Households" combo group:
+
+Code |	Category
+One-census-family household without additional persons | One-census-family household without additional persons
+Multigenerational household | Multigenerational household
+Other census family household | Other census family household
+One-person household | One-person household
+Two-or-more-person non-census-family household | Two-or-more-person non-census-family household
+
+
+## `cancensus` - an introduction
+
+** [`cancensus` github repo](https://github.com/mountainMath/cancensus) **
+
+
+** [`cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html)
+
+
+> **NOTE**
+> After an initial request to the cancensus server, all data is saved in the cache folder "cache_census". In other words, subsequent calls are to the local drive
+> The cache location and other environment parameters are set in the file "cancensus_setup.R"
+
+
+```{r setup}
+
+# tidyverse
+library(tidyverse)
+library(here)
+
+library(sf)
+library(terra)  # for plotting population as dots
+
+#library(mapboxapi)
+
+# cancensus
+library(cancensus)
+source(here::here("scripts", "cancensus_setup.R"))
+
+# MNP plot format etc
+source(here::here("scripts", "mnp_defaults_ggplot.R"))
+
+# as_dot_density()
+source(here::here("scripts", "as_dot_density.R"))
+
+```
+
+
+
+```{r}
+
+# set API key (stored in text file "secretAPI.txt")
+secretAPI <- readLines(here("scripts", "secretAPI.txt"))
+
+options(cancensus.api_key = secretAPI)
+
+```
+
+
+```{r}
+#set list of CSD names
+
+CSD_master <- read_csv(
+  here("geosuite", "2021_92-150-X_eng", "CSD.csv"),
+  col_types =
+    cols(CSDuid = col_character(),
+         SACtype  = col_character())
+)
+
+```
+
+
+***
+
+Start exploring the data
+(straight from [the `cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html))
+
+
+
+
+```{r}
+
+# To view available Census datasets
+census_datasets <- list_census_datasets()
+census_datasets
+
+```
+
+
+
+#### Regions
+
+```{r}
+
+# To view available named regions at different levels of Census hierarchy for the 2016 Census (for example)
+#census_regions <- list_census_regions("CA16")
+census_regions <- list_census_regions("CA21")
+
+
+# filters: 
+#   "^" is equivalent to "starts with"
+#   "$" is equivalent to "ends with"
+#   "." is a single character wild card
+
+census_regions %>%
+  filter(grepl("^59", region) )
+
+census_regions %>%
+  filter(grepl("^59", region),
+         level == "CSD")
+
+```
+
+
+#### Household vectors 2021
+
+
+```{r}
+
+# To view available Census variables for the 2021 Census
+# NOTE: there are 7,709 in total!!!
+
+census_vectors <- list_census_vectors("CA21")
+#write_csv(census_vectors, here("data_census", "census_vectors_CA21.csv"))
+
+census_vectors
+
+```
+
+See the file "census_vectors_CA21.csv" for a complete list
+
+
+This list shows the vector numbers for the 2021 Census related to households
+
+* check the CSV file for parent_vector relationships
+
+
+vector	type	label	units	parent_vector
+v_CA21_443	Total	Private households by household size
+v_CA21_444	Total	1 person
+v_CA21_445	Total	2 persons
+v_CA21_446	Total	3 persons
+v_CA21_447	Total	4 persons
+v_CA21_448	Total	5 or more persons
+v_CA21_449	Total	Number of persons in private households
+v_CA21_450	Male	Number of persons in private households
+v_CA21_451	Female	Number of persons in private households
+v_CA21_452	Total	Average household size
+v_CA21_510	Total	Persons in private households
+v_CA21_511	Male	Persons in private households
+v_CA21_512	Female	Persons in private households
+v_CA21_513	Total	Persons in census families
+v_CA21_514	Male	Persons in census families
+v_CA21_515	Female	Persons in census families
+v_CA21_516	Total	Married spouses or common-law partners
+v_CA21_517	Male	Married spouses or common-law partners
+v_CA21_518	Female	Married spouses or common-law partners
+v_CA21_519	Total	Parents in one-parent families
+v_CA21_520	Male	Parents in one-parent families
+v_CA21_521	Female	Parents in one-parent families
+v_CA21_522	Total	Children
+v_CA21_523	Male	Children
+v_CA21_524	Female	Children
+v_CA21_525	Total	In a two-parent family
+v_CA21_526	Male	In a two-parent family
+v_CA21_527	Female	In a two-parent family
+v_CA21_528	Total	In a one-parent family
+v_CA21_529	Male	In a one-parent family
+v_CA21_530	Female	In a one-parent family
+v_CA21_531	Total	Persons not in census families in private households
+v_CA21_532	Male	Persons not in census families in private households
+v_CA21_533	Female	Persons not in census families in private households
+v_CA21_534	Total	Living alone
+v_CA21_535	Male	Living alone
+v_CA21_536	Female	Living alone
+v_CA21_537	Total	Living with other relatives
+v_CA21_538	Male	Living with other relatives
+v_CA21_539	Female	Living with other relatives
+v_CA21_540	Total	Living with non-relatives only
+v_CA21_541	Male	Living with non-relatives only
+v_CA21_542	Female	Living with non-relatives only
+v_CA21_543	Total	Household type
+v_CA21_544	Total	One-census-family households without additional persons
+v_CA21_545	Total	Couple-family households
+v_CA21_546	Total	With children
+v_CA21_547	Total	Without children
+v_CA21_548	Total	One-parent-family households
+v_CA21_549	Total	Multigenerational households
+v_CA21_550	Total	Multiple-census-family households
+v_CA21_551	Total	One-census-family households with additional persons
+v_CA21_552	Total	Two-or-more-person non-census-family households
+v_CA21_553	Total	One-person households
+
+
+
+```{r}
+# list of vectors with the 2021 Census data 
+vector_list <- c(
+  "v_CA21_543", 
+  "v_CA21_544", 
+  "v_CA21_545", 
+  "v_CA21_546", 
+  "v_CA21_547", 
+  "v_CA21_548", 
+  "v_CA21_549", 
+  "v_CA21_550", 
+  "v_CA21_551", 
+  "v_CA21_552", 
+  "v_CA21_553"
+  )
+
+
+```
+
+
+
+## Comox Valley CD 5926
+
+CD 5926 == Comox Valley Regional District
+
+
+
+```{r data_files_938}
+# CENSUS SUB-DIVISIONS
+
+cma_num <- "5926"
+
+# Return data only
+census_data <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD') |> 
+  janitor::clean_names()
+
+# Return an sf-class data frame
+census_data_sf <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD', geo_format = "sf") |> 
+  janitor::clean_names()
+
+# Return a SpatialPolygonsDataFrame
+census_data_sp <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD', geo_format = "sp") |> 
+  janitor::clean_names()
+
+```
+
+
+check the hierarchy
+
+```{r}
+
+comox <- census_data |> 
+  filter(
+    geo_uid == "5926005"
+  ) |> 
+  pivot_longer(
+    cols = v_ca21_543_household_type:v_ca21_553_one_person_households,
+    names_to = "census_variable",
+    values_to = "count_households"
+  )
+
+write_csv(comox, "comox.csv")
+
+```
+
+
+
+create custom household structure hierarchy
+
+```{r}
+
+household_grp <- census_data |> 
+  rowwise() |> 
+  mutate(
+    `other census households` = sum(c_across(v_ca21_549_multigenerational_households:v_ca21_552_two_or_more_person_non_census_family_households))
+  ) |> 
+  select(
+    geo_uid,
+    region_name,
+    "total households" = v_ca21_543_household_type,
+    "couple family with children" = v_ca21_546_with_children,
+    "couple family w/o children" = v_ca21_547_without_children,
+    "one parent" = v_ca21_548_one_parent_family_households,
+    "one person" = v_ca21_553_one_person_households,
+    "other census households"
+  ) |> 
+  pivot_longer(
+    -c(geo_uid:region_name),
+    names_to = "household_type",
+    values_to = "household_count"
+  )
+
+# Comox Valley - merge IRI areas
+household_grp <- household_grp |> 
+  mutate(region_name_merge = case_when(
+    str_detect(region_name, "IRI") ~ "Comox 1 & Pentledge 2 (IRI)",
+    TRUE ~ region_name
+  )) |> 
+  group_by(region_name_merge, household_type) |> 
+  summarise(household_count = sum(household_count, na.rm = TRUE)) |> 
+  rename("region_name" = region_name_merge)
+
+household_grp
+
+```
+
+```{r}
+household_grp_2 <- household_grp |> 
+  filter(household_type != "total households") |> 
+  group_by(region_name) |> 
+  mutate(household_pct = household_count / sum(household_count) * 100) 
+
+
+household_grp_2$household_type |> 
+  fct_relevel(
+    "couple family w/o children",
+    "couple family with children",
+    "one parent",
+    "one person",
+    "other census households"
+    ) |> 
+  levels()
+
+```
+
+
+### plot: household type
+
+```{r}
+# count
+ggplot(household_grp_2, aes(x = household_type, y = household_count)) +
+    geom_col() + 
+  coord_flip()
+```
+
+
+```{r}
+# fancy it up
+
+
+
+pop_range_breaks <- seq(0, 12000, by = 2000)
+
+
+ggplot(household_grp_2, aes(x = household_type, y = household_count)) +
+  geom_col(fill = "#0c3343") +
+  coord_flip() +
+  mnp_chart_theme +
+  theme(
+    # remove all gridlines
+    panel.grid = element_blank()
+  ) +
+    labs(caption = "Source: Statistics Canada, Census 2021",
+         x = NULL,
+         y = "number of households") +
+   # flip the order of the categories
+  scale_x_discrete(limits = rev) +
+  scale_y_continuous(
+    breaks  = pop_range_breaks,
+    limits = c(min(pop_range_breaks), max(pop_range_breaks)),
+#    labels = abs(pop_range_breaks),
+    labels = scales::label_comma()
+  )  +
+  # add vertical white "gridlines"
+  geom_hline(yintercept = pop_range_breaks, col = "white")
+
+ggsave(
+  here::here("plot_output/comox_cd_household_type.jpg")
+#  width = 13.333,
+#  height = 7.5
+)
+
+
+```
+
+
+
+by CSD
+
+```{r}
+# count
+ggplot(household_grp_2, aes(x = region_name, y = household_count, fill = household_type)) +
+    geom_col() + 
+  coord_flip() +
+  scale_fill_brewer("blues", direction = -1)
+
+
+# percent
+ggplot(household_grp_2, aes(x = region_name, y = household_pct, fill = household_type)) +
+    geom_col() +
+  coord_flip() +
+  scale_fill_brewer("blues", direction = -1)
+
+
+```
+
+
+
+
+### -30-
+

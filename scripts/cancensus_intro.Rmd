@@ -1,0 +1,461 @@
+---
+title: "cancensus_wrangling"
+output: 
+  html_notebook:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: inline
+---
+
+#`cancensus` - an introduction
+
+** [`cancensus` github repo](https://github.com/mountainMath/cancensus) **
+
+
+** [`cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html)
+
+
+
+
+
+```{r Setup}
+
+# tidyverse
+library(tidyverse)
+library(here)
+
+# cancensus
+
+# (This is not necessary - `cancensus` is on CRAN now!)
+#devtools::install_github("mountainMath/cancensus")
+
+library(cancensus)
+
+
+# set working directory
+options(cancensus.cache_path = here("cancensus", "cache"))
+
+```
+
+
+
+```{r}
+
+# set API key (stored in text file "secretAPI.txt")
+secretAPI <- readLines(here("cancensus", "secretAPI.txt"))
+
+options(cancensus.api_key = secretAPI)
+
+```
+
+
+***
+
+Start exploring the data
+(straight from [the `cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html))
+
+
+
+
+```{r}
+
+# To view available Census datasets
+census_datasets <- list_census_datasets()
+census_datasets
+
+# To view available named regions at different levels of Census hierarchy for the 2016 Census (for example)
+census_regions16 <- list_census_regions("CA16")
+census_regions21 <- list_census_regions("CA16")
+
+# To view available Census variables
+census_vectors16 <- list_census_vectors("CA16")
+census_vectors21 <- list_census_vectors("CA21")
+
+("CA21")
+
+#write_csv(census_vectors21, "census_vectors21.csv")
+```
+
+
+```{r}
+
+# Return data only
+census_data <- get_census(dataset='CA16', regions=list(CMA="59933"), vectors=c("v_CA16_404","v_CA16_409","v_CA16_410"), level='CSD')
+
+
+census_data_21 <- get_census(dataset='CA21', regions=list(PR="59"), level='CT')
+
+```
+
+
+## Regions
+
+```{r}
+
+# filters: 
+#   "^" is equivalent to "starts with"
+#   "$" is equivalent to "ends with"
+#   "." is a single character wild card
+
+census_regions %>%
+  filter(grepl("^59", region) )
+
+census_regions %>%
+  filter(grepl("^59", region),
+         level == "CMA")
+
+```
+
+
+## Data sets
+
+### Income
+
+
+```{r}
+# Find the variables with "income" in the details
+
+vector_income <- search_census_vectors("income", dataset = 'CA16')
+
+vector_income
+
+
+
+```
+
+v_CA16_2397
+Median total income of households in 2015 ($)
+
+v_CA16_2398
+Median after-tax income of households in 2015 ($)
+
+v_CA16_2525
+In low income based on the Low-income measure, after tax (LIM-AT)
+
+v_CA16_2540
+Prevalence of low income based on the Low-income measure, after tax (LIM-AT) (%)
+
+v_CA16_2555
+In low income based on the Low-income cut-offs, after tax (LICO-AT)
+
+
+
+
+
+And example: Victoria
+
+```{r}
+
+# filters: 
+#   "^" is equivalent to "starts with"
+#   "$" is equivalent to "ends with"
+#   "." is a single character wild card
+
+# Return data only
+data_935_CT <- get_census(dataset='CA16', regions=list(CMA="59935"),
+                          vectors=c("v_CA16_2397","v_CA16_2398"), labels = "short", level = 'CT')
+
+data_935_DA <- get_census(dataset='CA16', regions=list(CMA="59935"),
+                          vectors=c("v_CA16_2397","v_CA16_2398"), labels = "short", level='DA')
+
+head(data_935_DA)
+
+```
+
+add percentiles
+
+```{r}
+
+head(data_935_CT)
+
+data_935_CT <- data_935_CT %>%
+  mutate(med_pretax_pctl = percent_rank(`v_CA16_2397`),
+         med_aftertax_pctl = percent_rank(`v_CA16_2398`))
+
+data_935_DA <- data_935_DA %>%
+  mutate(med_pretax_pctl = percent_rank(`v_CA16_2397`),
+         med_aftertax_pctl = percent_rank(`v_CA16_2398`))
+
+
+# use purrr
+
+
+mtcars %>%
+ select(., mpg, wt) %>% 
+  map(., quantile, probs = c(0.10, 0.90), na.rm=TRUE) %>%
+  as.data.frame(.) %>%
+  `rownames<-`(c("10%", "90%"))
+
+data_935_CT %>%
+  select(., v_CA16_2397, v_CA16_2398) %>% 
+  map(., quantile, probs = c(seq(0.0, 1.0, by = 0.1)), na.rm=TRUE) %>% 
+  as.data.frame(.) %>% 
+      `rownames<-`(c(seq(0.0, 1.0, by = 0.1)))
+
+data_935_CT %>%
+  select(., v_CA16_2397, v_CA16_2398) %>% 
+  map(., quantile, probs = c(seq(0.0, 1.0, by = 0.2)), na.rm=TRUE) %>% 
+  as.data.frame(.) %>% 
+      `rownames<-`(c(seq(0.0, 1.0, by = 0.2)))
+
+data_935_CT %>%
+  select(., v_CA16_2397, v_CA16_2398) %>% 
+  map(., quantile, probs = c(seq(0.0, 1.0, by = 0.25)), na.rm=TRUE) %>% 
+  as.data.frame(.) %>% 
+      `rownames<-`(c(seq(0.0, 1.0, by = 0.25)))
+
+
+```
+
+
+#### repeat for B.C.
+
+
+
+```{r}
+# Return data only
+data_income_median_59_CT <- get_census(dataset='CA16', regions=list(PR="59"),
+                          vectors=c("v_CA16_2397","v_CA16_2398"), labels = "short", level='CT')
+
+data_income_median_59_DA <- get_census(dataset='CA16', regions=list(PR="59"),
+                          vectors=c("v_CA16_2397","v_CA16_2398"), labels = "short", level='DA')
+
+head(data_income_median_59_DA)
+
+
+data_income_median_59_CT <- data_income_median_59_CT %>%
+  mutate(med_pretax_pctl = percent_rank(`v_CA16_2397`),
+         med_aftertax_pctl = percent_rank(`v_CA16_2398`))
+
+data_income_median_59_DA <- data_income_median_59_DA %>%
+  mutate(med_pretax_pctl = percent_rank(`v_CA16_2397`),
+         med_aftertax_pctl = percent_rank(`v_CA16_2398`))
+
+here()
+
+write_csv(data_income_median_59_CT, 
+          here("cancensus", "data", 
+               "data_income_median_59_CT.csv"))
+
+
+write_csv(data_income_median_59_DA, 
+          here("cancensus", "data",
+               "data_income_median_59_DA.csv"))
+
+
+
+```
+
+
+
+
+### Shelter to income ratio (STIR)
+
+NOTE: add counts of owner and tenant households
+
+```{r}
+
+shelter_cost_vars <- c("v_CA16_4886", "v_CA16_4887", "v_CA16_4888", "v_CA16_4892", "v_CA16_4899")
+
+shelter_cost_vars_list <- vector_income %>%
+  filter(vector %in% shelter_cost_vars)
+
+print(shelter_cost_vars_list)
+write_csv(shelter_cost_vars_list, 
+          here("cancensus", "data",
+               "shelter_cost_vars_list.csv"))
+
+# Return data only
+data_sheltercost_935_CT <- get_census(dataset='CA16', regions=list(CMA="59935"),
+                          vectors = shelter_cost_vars, labels = "short", level='CT')
+
+data_sheltercost_935_DA <- get_census(dataset='CA16', regions=list(CMA="59935"),
+                          vectors = shelter_cost_vars, labels = "short", level='DA')
+
+
+```
+
+
+
+#### repeat for B.C.
+
+```{r}
+
+#shelter_cost_vars <- c("v_CA16_4886", "v_CA16_4887", "v_CA16_4888", "v_CA16_4892", "v_CA16_4899")
+
+#vector_income %>%
+#  filter(vector %in% shelter_cost_vars)
+
+
+# Return data only
+data_sheltercost_59_CT <- get_census(dataset='CA16', regions=list(PR="59"),
+                          vectors = shelter_cost_vars, labels = "short", level='CT')
+
+data_sheltercost_59_DA <- get_census(dataset='CA16', regions=list(PR="59"),
+                          vectors = shelter_cost_vars, labels = "short", level='DA')
+
+
+
+# add percentiles 
+
+data_sheltercost_59_CT <- data_sheltercost_59_CT %>%
+  mutate(stir30_total_pctl = percent_rank(`v_CA16_4888`),
+         stir30_owner_pctl = percent_rank(`v_CA16_4892`),
+         stir30_tenant_pctl = percent_rank(`v_CA16_4899`))
+
+data_sheltercost_59_DA <- data_sheltercost_59_DA %>%
+  mutate(stir30_total_pctl = percent_rank(`v_CA16_4888`),
+         stir30_owner_pctl = percent_rank(`v_CA16_4892`),
+         stir30_tenant_pctl = percent_rank(`v_CA16_4899`))
+
+
+# write as csv
+
+
+write_csv(data_sheltercost_59_CT, 
+          here("cancensus", "data",
+               "data_sheltercost_59_CT.csv"))
+
+
+write_csv(data_sheltercost_59_DA, 
+                    here("cancensus", "data",
+                         "data_sheltercost_59_DA.csv"))
+
+
+```
+
+
+
+
+
+Other variables
+
+education
+http://www12.statcan.gc.ca/census-recensement/2016/ref/dict/pop038-eng.cfm
+
+housing - adequacy and suitability
+http://www12.statcan.gc.ca/census-recensement/2016/ref/98-501/98-501-x2016007-eng.cfm
+
+income - components of income
+http://www12.statcan.gc.ca/census-recensement/2016/ref/98-501/98-501-x2016006-eng.cfm
+
+income - all the low income
+Low-income concepts
+http://www12.statcan.gc.ca/census-recensement/2016/ref/98-501/98-501-x2016006-eng.cfm
+
+
+households
+http://www12.statcan.gc.ca/census-recensement/2016/ref/98-501/98-501-x2016004-eng.cfm
+esp. persons living alone 
+marital status
+
+mobility-a-rama
+http://www12.statcan.gc.ca/census-recensement/2016/ref/98-501/98-501-x2016014-eng.cfm
+
+ethnicity
+immigration past 5
+
+
+
+
+map DA / CT to LHA
+
+
+
+### Mobility
+
+
+```{r}
+# Find the variables with "mobility" in the details
+
+vector_mobility <- search_census_vectors("mobility", dataset = 'CA16')
+
+vector_mobility
+
+
+
+```
+
+
+
+
+
+### Disability
+
+see "Activities of Daily Living" questions
+https://www12.statcan.gc.ca/nhs-enm/2016/ref/questionnaires/questions-eng.cfm
+
+```{r}
+# Find the variables with "disability" in the details
+
+vector_PWD <- search_census_vectors("difficulty", dataset = 'CA16')
+
+vector_PWD
+
+unique(vector_PWD$label)
+
+```
+
+
+
+# --- STOP HERE
+
+
+ plagarized from Sasha
+ 
+
+```{r}
+censusMobility <- censusMobilityCma
+censusMobility %<>% rename(
+  # `Non-movers` = v_CA16_6695,
+  Movers = v_CA16_6698,
+  # `Non-migrants` = v_CA16_6701,
+  Migrants = v_CA16_6704,
+  `Internal migrants` = v_CA16_6707#,
+  # `External migrants` = v_CA16_6716,
+  # `Intraprovincial migrants` = v_CA16_6710,
+  # `Interprovincial migrants` = v_CA16_6713,
+)
+
+
+vectorsMobility <- search_census_vectors(' Mobility status 1 year ago', "CA16", type = "Total") %>%
+  child_census_vectors(leaves_only = FALSE)
+
+for (censusLevel in c("CMA", "CD", "CSD", "CT", "DA")) {
+  censusData <-
+    get_census(
+      "CA16",
+      level = censusLevel,
+      # regions = cdRegions,
+      regions = regions,
+      vectors = vectorsMobility %>% pull("vector"),
+      use_cache = TRUE,
+      labels = "short",
+      geo_format = NA
+    )
+  censusData %<>%
+    rename(
+      `Non-movers` = v_CA16_6695,
+      # Movers = v_CA16_6698,
+      `Non-migrants` = v_CA16_6701,
+      # Migrants = v_CA16_6704,
+      # `Internal migrants` = v_CA16_6707,
+      `External migrants` = v_CA16_6716,
+      `Intraprovincial migrants` = v_CA16_6710,
+      `Interprovincial migrants` = v_CA16_6713
+    )
+  censusData %<>% filter(Type == censusLevel)
+  saveRDS(censusData, here::here("data", paste0("census2016-mobility-", censusLevel, ".rds")))
+}
+
+```
+
+
+***
+
+## CENSUS REFERENCE MATERIALS
+
+Questions, 2016 https://www12.statcan.gc.ca/nhs-enm/2016/ref/questionnaires/questions-eng.cfm
+
+-30-

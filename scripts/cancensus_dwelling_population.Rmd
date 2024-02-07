@@ -1,0 +1,148 @@
+---
+title: "cancensus_wrangling"
+output: 
+  html_notebook:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: inline
+---
+
+#`cancensus` - an introduction
+
+** [`cancensus` github repo](https://github.com/mountainMath/cancensus) **
+
+
+** [`cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html)
+
+
+
+
+
+```{r Setup}
+
+# tidyverse
+library(tidyverse)
+library(here)
+
+# cancensus
+
+# (This is not necessary - `cancensus` is on CRAN now!)
+#devtools::install_github("mountainMath/cancensus")
+
+library(cancensus)
+
+
+# set working directory
+options(cancensus.cache_path = here("cancensus", "cache"))
+
+```
+
+
+
+```{r}
+
+# set API key (stored in text file "secretAPI.txt")
+secretAPI <- readLines(here("cancensus", "secretAPI.txt"))
+
+options(cancensus.api_key = secretAPI)
+
+```
+
+
+***
+
+Start exploring the data
+(straight from [the `cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html))
+
+
+
+
+```{r}
+
+# To view available Census datasets
+census_datasets <- list_census_datasets()
+census_datasets
+
+# To view available named regions at different levels of Census hierarchy for the 2016 Census (for example)
+census_regions16 <- list_census_regions("CA16")
+census_regions21 <- list_census_regions("CA16")
+
+# To view available Census variables
+census_vectors16 <- list_census_vectors("CA16")
+census_vectors21 <- list_census_vectors("CA21")
+
+("CA21")
+
+
+```
+
+
+```{r get_data}
+
+# Return data only
+census_data_16 <- get_census(dataset='CA16', regions=list(PR="59"), level='CT')
+
+census_data_21 <- get_census(dataset='CA21', regions=list(PR="59"), level='CT')
+
+```
+
+
+```{r ca16-21_join}
+
+cd_2116 <- census_data_21 %>% 
+  left_join(census_data_16, by = "GeoUID")
+
+cd_2116 <- cd_2116 %>% 
+  rename("population21" = Population.x,
+         "dwellings21" = Dwellings.x,
+         "households21" = Households.x, 
+         "population16" = Population.y,
+         "dwellings16" = Dwellings.y,
+         "households16" = Households.y)
+
+cd_2116 <- cd_2116 %>% 
+  # calculate pct change
+  mutate(pop_pct_chg = (population21 - population16)/population16 *100,
+         dwell_pct_chg = (dwellings21 - dwellings16)/dwellings16 *100) %>% 
+  # remove rows with missing and infinite values
+  drop_na() %>% 
+  filter(pop_pct_chg < Inf) %>% 
+  filter(dwell_pct_chg < Inf)
+
+```
+
+
+```{r}
+cd_2116 %>% 
+  select(GeoUID, population21, pop_pct_chg, dwellings21, dwell_pct_chg) %>% 
+  arrange(desc(pop_pct_chg))
+```
+
+
+plot
+
+```{r}
+
+cd_2116 %>% 
+  filter(population21 > 100) %>% 
+ggplot(aes(x = dwell_pct_chg, y = pop_pct_chg)) + 
+  geom_point() +
+  geom_smooth(method = lm)
+
+ggsave("pop_dwell_lm.png")
+
+```
+
+### regression model
+
+```{r}
+
+cd_2116_100plus <- cd_2116 %>% 
+  filter(population21 > 100)
+  
+mod_pop_dwell <- lm(pop_pct_chg ~ dwell_pct_chg, cd_2116_100plus)
+
+summary(mod_pop_dwell)
+```
+

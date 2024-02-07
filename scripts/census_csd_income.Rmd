@@ -1,0 +1,342 @@
+---
+title: "Census: households by Census Subdivisions"
+subtitle: "2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: inline
+---
+
+## INCOME
+
+**Defintions etc**
+
+https://www12.statcan.gc.ca/census-recensement/2021/ref/98-500/004/98-500-x2021004-eng.cfm
+
+"After-tax income is a useful measure of funds available to a household, family or individual for consumption, saving and investment. It is derived by deducting income taxes from total income. Income taxes consist of net federal income tax and provincial and territorial income taxes."
+
+
+
+## `cancensus` - an introduction
+
+** [`cancensus` github repo](https://github.com/mountainMath/cancensus) **
+
+
+** [`cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html)
+
+
+> **NOTE**
+> After an initial request to the cancensus server, all data is saved in the cache folder "cache_census". In other words, subsequent calls are to the local drive
+> The cache location and other environment parameters are set in the file "cancensus_setup.R"
+
+
+```{r setup}
+
+# tidyverse
+library(tidyverse)
+library(here)
+
+library(sf)
+library(terra)  # for plotting population as dots
+
+#library(mapboxapi)
+
+# cancensus
+library(cancensus)
+source(here::here("scripts", "cancensus_setup.R"))
+
+# MNP plot format etc
+source(here::here("scripts", "mnp_defaults_ggplot.R"))
+
+# as_dot_density()
+source(here::here("scripts", "as_dot_density.R"))
+
+```
+
+
+
+```{r}
+
+# set API key (stored in text file "secretAPI.txt")
+secretAPI <- readLines(here("scripts", "secretAPI.txt"))
+
+options(cancensus.api_key = secretAPI)
+
+```
+
+
+```{r}
+#set list of CSD names
+
+CSD_master <- read_csv(
+  here("geosuite", "2021_92-150-X_eng", "CSD.csv"),
+  col_types =
+    cols(CSDuid = col_character(),
+         SACtype  = col_character())
+)
+
+```
+
+
+***
+
+Start exploring the data
+(straight from [the `cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html))
+
+
+
+
+```{r}
+
+# To view available Census datasets
+census_datasets <- list_census_datasets()
+census_datasets
+
+```
+
+
+
+#### Regions
+
+```{r}
+
+# To view available named regions at different levels of Census hierarchy for the 2016 Census (for example)
+#census_regions <- list_census_regions("CA16")
+census_regions <- list_census_regions("CA21")
+
+
+# filters: 
+#   "^" is equivalent to "starts with"
+#   "$" is equivalent to "ends with"
+#   "." is a single character wild card
+
+census_regions %>%
+  filter(grepl("^59", region) )
+
+census_regions %>%
+  filter(grepl("^59", region),
+         level == "CSD")
+
+```
+
+
+#### Income vectors 2021
+
+
+**REMEMBER**
+
+2020 was the first year of the COVID pandemic, so will over-state govt transfers 
+
+Use 2019 (or more recent CRA release) instead
+
+
+
+
+```{r}
+
+# To view available Census variables for the 2021 Census
+# NOTE: there are 7,709 in total!!!
+
+census_vectors <- list_census_vectors("CA21")
+#write_csv(census_vectors, here("data_census", "census_vectors_CA21.csv"))
+
+census_vectors |> 
+  filter(str_detect(label, "income"))
+
+```
+
+See the file "census_vectors_CA21.csv" for a complete list
+
+
+This list shows the vector numbers for the 2021 Census related to households
+
+* check the CSV file for parent_vector relationships
+
+
+vector	type	label
+v_CA21_818	Total	Median total income in 2019 among recipients ($)
+v_CA21_824	Total	Median after-tax income in 2019 among recipients ($)
+v_CA21_830	Total	Median market income in 2019 among recipients ($)
+v_CA21_836	Total	Median employment income in 2019 among recipients ($)
+v_CA21_842	Total	Median government transfers in 2019 among recipients ($)
+v_CA21_848	Total	Median employment insurance benefits in 2019 among recipients ($)
+v_CA21_857	Total	Average total income in 2019 among recipients ($)
+v_CA21_863	Total	Average after-tax income in 2019 among recipients ($)
+v_CA21_869	Total	Average market income in 2019 among recipients ($)
+v_CA21_875	Total	Average employment income in 2019 among recipients ($)
+v_CA21_881	Total	Average government transfers in 2019 among recipients ($)
+v_CA21_887	Total	Average employment insurance benefits in 2019 among recipients ($)
+v_CA21_7722	Total	Median employment income in 2019 for full-year full-time workers in 2020 ($)
+v_CA21_7725	Total	Average employment income in 2019 for full-year full-time workers in 2020 ($)
+v_CA21_7731	Total	Median employment income in 2019 of those who worked part-year or part-time in 2020 ($)
+v_CA21_7734	Total	Average employment income in 2019 of those who worked part-year or part-time in 2020 ($)
+
+
+
+```{r}
+# list of vectors with the 2021 Census data 
+vector_list <- c(
+  "v_CA21_818", 
+  "v_CA21_824", 
+  "v_CA21_830", 
+  "v_CA21_836", 
+  "v_CA21_842", 
+  "v_CA21_848"
+  )
+
+
+```
+
+
+
+## Comox Valley CD 5926
+
+CD 5926 == Comox Valley Regional District
+
+
+
+```{r data_files_938}
+# CENSUS SUB-DIVISIONS
+
+cma_num <- "5926"
+
+# Return data only
+census_data <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD') |> 
+  janitor::clean_names()
+
+# Return an sf-class data frame
+census_data_sf <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD', geo_format = "sf") |> 
+  janitor::clean_names()
+
+# Return a SpatialPolygonsDataFrame
+census_data_sp <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD', geo_format = "sp") |> 
+  janitor::clean_names()
+
+```
+
+
+check the hierarchy
+
+```{r}
+
+comox <- census_data |> 
+  filter(
+    geo_uid == "5926005"
+  ) |> 
+  pivot_longer(
+    cols = v_ca21_818_median_total_income_in_2019_among_recipients:v_ca21_848_median_employment_insurance_benefits_in_2019_among_recipients,
+    names_to = "census_variable",
+    values_to = "value"
+  )
+
+comox
+
+#write_csv(comox, "comox.csv")
+
+```
+
+```{r}
+csd_median_income_2019 <- census_data |> 
+  pivot_longer(
+    cols = v_ca21_818_median_total_income_in_2019_among_recipients:v_ca21_848_median_employment_insurance_benefits_in_2019_among_recipients,
+    names_to = "census_variable",
+    values_to = "value"
+  ) |> 
+  filter(
+    region_name %in% c("Comox (T)", "Courtenay (CY)",
+                       "Cumberland (VL)", "Comox Valley A (RDA)",
+                       "Comox Valley B (Lazo North) (RDA)",
+                       "Comox Valley C (Puntledge - Black Creek) (RDA)")
+  )
+
+csd_median_income_2019
+
+```
+
+
+
+### plot: income by csd
+
+```{r}
+
+csd_median_income_2019 |> 
+  filter(census_variable == "v_ca21_824_median_after_tax_income_in_2019_among_recipients") |> 
+  #
+ggplot(aes(x = region_name, y = value)) +
+    geom_col() + 
+  coord_flip()
+```
+
+
+```{r}
+# fancy it up
+
+
+pop_range_breaks <- seq(0, 12000, by = 2000)
+
+
+ggplot(household_grp_2, aes(x = household_type, y = household_count)) +
+    geom_col(fill = "#0c3343") + 
+  coord_flip() +
+  mnp_chart_theme + 
+     scale_y_continuous(breaks  = pop_range_breaks,
+                      limits = c(min(pop_range_breaks), max(pop_range_breaks)),
+                       labels = abs(pop_range_breaks))  +
+  # flip the order of the categories
+  scale_x_discrete(limits = rev) +
+
+# add vertical white "gridlines"
+  geom_hline(yintercept = pop_range_breaks, col="white")
+
+
+ggsave(here::here("plot_output/comox_cd_household_type.jpg"),
+       width = 13.333,
+       height = 7.5
+  )
+
+```
+
+
+
+by CSD
+
+```{r}
+# count
+ggplot(household_grp_2, aes(x = region_name, y = household_count, fill = household_type)) +
+    geom_col() + 
+  coord_flip() +
+  scale_fill_brewer("blues", direction = -1)
+
+
+# percent
+ggplot(household_grp_2, aes(x = region_name, y = household_pct, fill = household_type)) +
+    geom_col() +
+  coord_flip() +
+  scale_fill_brewer("blues", direction = -1)
+
+
+```
+
+
+
+### interactive map
+
+
+Comox Valley:
+
+
+```{r}
+cancensus::get_census("2021",
+     regions=list(CD="5926"),
+      vectors=c(hhinc="v_CA21_906"),
+       geo_format = "sf",
+       level="DA") |>
+  mapview::mapview(zcol="hhinc",
+         layer.name="Median household income")
+```
+
+
+### -30-
+

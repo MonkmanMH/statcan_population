@@ -47,7 +47,7 @@ five_year_bins <- c(
 read data
 
 ```{r}
-df_pop_csd_vi_5yr <- read_rds("data_statcan/df_pop_csd_vi_5yr.rds")
+df_pop_csd_vi_5yr <- read_rds(here::here("data_statcan", "df_pop_csd_vi_5yr.rds"))
 
 ```
 
@@ -303,7 +303,7 @@ pl_pyramid_csd_region <- pl_pyramid_csd_region +
 
 pl_pyramid_csd_region
 
-ggsave(glue("plot_output/pyramid_{community_name}_2021.jpg"))
+#ggsave(glue("plot_output/pyramid_{community_name}_2021.jpg"))
 
 ```
 
@@ -545,6 +545,149 @@ for (i in nrow(vi_community_plots)) {
 }
 
 ```
+
+
+
+## CD Comox Valley
+
+```{r}
+df_pop_cd_comox_5yr <- read_rds(here::here("data_statcan", "df_pop_cd_comox_5yr.rds"))
+df_pop_cd_comox_5yr
+
+```
+
+
+
+```{r}
+
+
+df_pop_cd_comox_5yr <- df_pop_cd_comox_5yr |> 
+    mutate(
+    pct_men = pop_men / sum(pop_men) * 100,
+    pct_women = pop_women / sum(pop_women) * 100
+  )
+
+
+df_pop_pyramid_cd <- df_pop_cd_comox_5yr |> 
+  select(-contains("total"),
+         -contains("pct_age_grp"),
+         -contains("dguid"),
+         -contains("coordinate"),
+         -contains("symbol")) |> 
+  # set value of men to negative
+  mutate(
+    pop_men = -pop_men,
+    pct_men = -pct_men
+  ) |> 
+  pivot_longer(-c(ref_date:age_grp), names_to = "gender", values_to = "pop_2021") 
+
+df_pop_pyramid_cd
+```
+
+
+```{r}
+### ---  
+
+# now plot: total population
+pl_pyramid_cd <- df_pop_pyramid_community |> 
+  # filter for pop or pct
+  filter(str_detect(gender, "pop")) |> 
+
+ggplot(
+  aes(x = pop_2021,
+           y = age_grp,
+           fill = gender)) + 
+  geom_col()
+
+# pl_pyramid_csd
+
+# fix scale numbering
+
+pop_range <- range(df_pop_pyramid_community$pop_2021)
+#pop_range
+
+pop_range_breaks <- pretty(pop_range)
+
+pl_pyramid_cd +
+   scale_x_continuous(breaks  = pop_range_breaks,
+                       labels = abs(pop_range_breaks)) +
+  theme_light()
+
+
+## overlay region
+
+pl_pyramid_cd <- 
+ df_pop_pyramid_community |> 
+  # filter for pop or pct
+  filter(str_detect(gender, "pct")) |> 
+  # now plot
+ggplot( 
+       aes(x = pop_2021,
+           y = age_grp,
+           fill = gender)) + 
+  geom_col() +
+  theme_classic() +
+  scale_fill_manual(
+    values=c("#0C3343", "#EF5A27"),          # dark blue and action orange
+    labels=c("percent men", "percent women")
+    )  +
+  xlab("percent of population") +
+  ylab(NULL)
+
+pl_pyramid_cd
+```
+
+
+```{r}
+# fix scale numbering
+pop_range_breaks <- seq(-6, 6, by = 2)
+pl_pyramid_cd <- pl_pyramid_cd +
+   scale_x_continuous(breaks  = pop_range_breaks,
+#                      limits = c(min(pop_range_breaks), max(pop_range_breaks)),
+                      limits = c(-6, 6),
+                       labels = abs(pop_range_breaks))  
+
+
+pl_pyramid_cd
+### ---
+
+# overlay region as transparent grey
+
+## overlay region
+pl_pyramid_cd <- 
+  pl_pyramid_cd +
+  geom_col(
+    aes(
+      x = df_pl_vi_pyramid$pct_of_pop, 
+      y = df_pl_vi_pyramid$age_grp,
+      colour = gender 
+      ),
+    colour = "#E5E5E3",
+    size = 0.75,
+    fill = "#E5E5E3", alpha = 0.33 
+    )
+
+# add title
+pl_pyramid_cd <- pl_pyramid_cd +
+  labs(
+    title = "Comox Valley Regional District",
+    subtitle = "compared to Vancouver Island (grey)",
+    caption = "Census 2021: Statistics Canada"
+  ) 
+#+
+#  theme(legend.position = "bottom"
+#        )
+  
+pl_pyramid_cd
+
+
+
+ggsave(here::here("plot_output", "pyramid_ComoxValley_CD_2021.jpg"))
+
+
+```
+
+
 
 
 ### test

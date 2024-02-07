@@ -1,0 +1,640 @@
+---
+title: "Census: population by census tract"
+subtitle: "population density 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: inline
+---
+
+## `cancensus` - an introduction
+
+** [`cancensus` github repo](https://github.com/mountainMath/cancensus) **
+
+
+** [`cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html)
+
+
+> **NOTE**
+> After an initial request to the cancensus server, all data is saved in the cache folder "cache_census". In other words, subsequent calls are to the local drive
+> The cache location and other environment parameters are set in the file "cancensus_setup.R"
+
+
+```{r setup}
+
+# tidyverse
+library(tidyverse)
+library(here)
+
+library(sf)
+library(terra)  # for plotting population as dots
+
+library(mapboxapi)
+
+# cancensus
+library(cancensus)
+source(here::here("scripts", "cancensus_setup.R"))
+
+# MNP plot format etc
+source(here::here("scripts", "mnp_defaults_ggplot.R"))
+
+# as_dot_density()
+source(here::here("scripts", "as_dot_density.R"))
+
+```
+
+
+
+```{r}
+
+# set API key (stored in text file "secretAPI.txt")
+secretAPI <- readLines(here("scripts", "secretAPI.txt"))
+
+options(cancensus.api_key = secretAPI)
+
+```
+
+
+```{r}
+#set list of CSD names
+
+CSD_master <- read_csv(
+  here("geosuite", "2021_92-150-X_eng", "CSD.csv"),
+  col_types =
+    cols(CSDuid = col_character(),
+         SACtype  = col_character())
+)
+
+```
+
+
+***
+
+Start exploring the data
+(straight from [the `cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html))
+
+
+
+
+```{r}
+
+# To view available Census datasets
+census_datasets <- list_census_datasets()
+census_datasets
+
+```
+
+
+
+####Regions
+
+```{r}
+
+# To view available named regions at different levels of Census hierarchy for the 2016 Census (for example)
+#census_regions <- list_census_regions("CA16")
+census_regions <- list_census_regions("CA21")
+
+
+# filters: 
+#   "^" is equivalent to "starts with"
+#   "$" is equivalent to "ends with"
+#   "." is a single character wild card
+
+census_regions %>%
+  filter(grepl("^59", region) )
+
+census_regions %>%
+  filter(grepl("^59", region),
+         level == "CMA")
+
+```
+
+
+#### Population vectors 2021
+
+
+```{r}
+
+# To view available Census variables for the 2021 Census
+# NOTE: there are 7,709 in total!!!
+
+census_vectors <- list_census_vectors("CA21")
+#write_csv(census_vectors, here("data_census", "census_vectors_CA21.csv"))
+
+census_vectors
+
+```
+
+
+This list shows the vector numbers for the 2021 Census related to population
+
+
+vector	type	label	units	parent_vector
+v_CA21_1	Total	Population, 2021	Number	NA
+v_CA21_2	Total	Population, 2016	Number	NA
+v_CA21_3	Total	Population percentage change, 2016 to 2021	Number	NA
+v_CA21_4	Total	Total private dwellings	Number	NA
+v_CA21_5	Total	Private dwellings occupied by usual residents	Number	v_CA21_4
+v_CA21_6	Total	Population density per square kilometre	Ratio	NA
+v_CA21_7	Total	Land area in square kilometres	Number	NA
+v_CA21_8	Total	Total - Age	Number	NA
+v_CA21_9	Male	Total - Age	Number	NA
+v_CA21_10	Female	Total - Age	Number	NA
+
+
+
+```{r}
+# list of vectors with the 2021 Census data 
+vector_list <- c(
+  "v_CA21_1", 
+  "v_CA21_2", 
+  "v_CA21_3",
+  "v_CA21_4",
+  "v_CA21_5", 
+  "v_CA21_6", 
+  "v_CA21_7",
+  "v_CA21_8" 
+  )
+
+
+```
+
+
+
+## Nanaimo CMA 938
+
+```{r data_files_938}
+# CENSUS SUB-DIVISIONS
+
+cma_num <- "59938"
+
+# Return data only
+census_data <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD')
+
+# Return an sf-class data frame
+census_data_sf <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD', geo_format = "sf")
+
+# Return a SpatialPolygonsDataFrame
+census_data_sp <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD', geo_format = "sp")
+```
+
+
+```{r data_files_938_CT}
+# CENSUS TRACTS
+
+
+cma_num <- "59938"
+
+
+# Return data only
+census_data <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CT')
+
+# Return an sf-class data frame
+census_data_sf <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CT', geo_format = "sf")
+
+# Return a SpatialPolygonsDataFrame
+census_data_sp <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CT', geo_format = "sp")
+
+```
+
+mapping
+
+```{r}
+
+
+
+cma_num <- "59938"
+
+
+# retrieve sf dataframe
+nanaimo_cma <- get_census(dataset='CA21', regions=list(CMA=cma_num),
+                         vectors=c(vector_list), level='CT', quiet = TRUE, 
+                         geo_format = 'sf', labels = 'short')
+
+nanaimo_cma <- nanaimo_cma %>% 
+  left_join(CSD_master, by = c("CSD_UID" = "CSDuid"))
+  
+#write_rds(nanaimo_cma, here("data_census", "nanaimo_cma_2021.rds"))
+
+
+
+```
+
+
+```{r read_nanaimo_cma}
+
+#nanaimo_cma <- read_rds(here("data_census", "nanaimo_cma_2021.rds"))
+
+```
+
+
+### pct pop change
+
+v_CA21_3 == percent population change
+
+```{r}
+
+plot_data <- nanaimo_cma
+
+ggplot(plot_data) + 
+  geom_sf(aes(fill = v_CA21_3))
+
+map_cma <- 
+ggplot(plot_data) + 
+  geom_sf(aes(fill = v_CA21_3)) +
+  coord_sf(xlim = c(-124.1,-123.9),
+           ylim = c(49.1, 49.3)) 
+
+map_cma
+
+```
+
+
+viridis 1
+
+
+```{r}
+
+ggplot(nanaimo_cma) +
+  geom_sf(aes(fill = v_CA21_3), colour = "grey") +
+  scale_fill_gradient(
+    low = "#eef0f2",
+    high = "#0c3343",
+    name = "population: percent change\n2016–2021", 
+    labels = scales::comma
+    ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    legend.position = c(0.2, 0.75)
+  ) +
+  coord_sf(datum = NA) 
+
+#  labs(title = "Median After-tax Income of Couple-Families with Children in 2015", subtitle = "Victoria CMA Census Tracts, 2016 Census")
+
+#ggsave(here("plot_output", "cma938_2021_popchange.jpg"))
+
+```
+
+crop
+
+```{r}
+
+ggplot(nanaimo_cma) +
+  geom_sf(aes(fill = v_CA21_3), colour = "grey") +
+  # crop
+  coord_sf(xlim = c(-124.1,-123.9),
+           ylim = c(49.1, 49.3)) +
+  
+  scale_fill_gradient(
+    low = "#eef0f2",
+    high = "#0c3343",
+     name = "percent population change, 2016–2021", 
+    labels = scales::comma
+   ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  ) 
+
+
+
+```
+
+
+### Nanaimo urban
+
+#### net population change
+
+```{r}
+
+
+nanaimo_cma_urban <- nanaimo_cma |> 
+  mutate(pop_change_net = Population - `Population 2016`) |> 
+  filter(name != "0020.00")
+
+
+ggplot(nanaimo_cma_urban) +
+  geom_sf(aes(fill = pop_change_net), colour = "grey") +
+  # crop
+  coord_sf(xlim = c(-124.2,-123.7),
+           ylim = c(49.00, 49.3)) +
+  
+  scale_fill_gradient2(
+    low = "#ef5a27",
+    high = "#0c3343",
+     name = "Population:\nnet change\n2016–2021", 
+    labels = scales::comma
+   ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  ) 
+
+
+#ggsave(here("plot_output", "cma938_2021_popchange_urban.jpg"))
+
+
+```
+
+
+#### population change: percent
+
+```{r}
+ggplot(nanaimo_cma_urban) +
+  geom_sf(aes(fill = v_CA21_3), colour = "grey") +
+  # crop
+  coord_sf(xlim = c(-124.2,-123.7),
+           ylim = c(49.00, 49.3)) +
+  
+  scale_fill_gradient2(
+    low = "#ef5a27",
+    high = "#0c3343",
+     name = "Population:\npercent change\n2016–2021", 
+    labels = scales::comma
+   ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  ) 
+
+
+#ggsave(here("plot_output", "cma938_2021_popchange_pct_urban.jpg"))
+
+
+```
+
+
+### population dots
+
+From Kyle Walker
+
+https://github.com/walkerke/map-challenge-2023/blob/main/scripts/day-27-dot.R
+
+
+
+https://rspatial.github.io/terra/reference/dots.html
+
+https://rspatial.org/index.html
+
+https://bookdown.org/igisc/EnvDataSci/spatial-data-and-maps.html#spatvectors-in-terra
+
+
+https://milospopovic.net/6-ways-to-map-population-with-r.r/
+
+
+
+
+```{r}
+
+nanaimo_dots <- as_dot_density(
+  input_data = nanaimo_cma,
+  value = "Population",
+  values_per_dot = 100
+)
+
+```
+
+
+```{r}
+
+map_ct <- ggplot(nanaimo_cma) +
+  geom_sf()
+
+
+map_ct +
+  geom_sf(
+    mapping = aes(),
+    data = nanaimo_dots,
+    size = 0.01
+    ) +
+#  theme_void() +
+#  scale_color_brewer(palette = "Set1") +
+#  theme(legend.position = "bottom") +
+  labs(
+    #color = "Race / ethnicity",
+       caption = "1 dot = 100 residents") 
+
+```
+
+#### Nanaimo urban
+
+
+```{r}
+map_ct_urban <- 
+ggplot(nanaimo_cma_urban) +
+  geom_sf() +
+  # crop
+  coord_sf(xlim = c(-124.2,-123.7),
+           ylim = c(49.00, 49.3)) +
+  
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank()
+  ) 
+
+map_ct_urban
+```
+
+
+```{r}
+
+people_per_dot <- 100
+
+nanaimo_dots <- as_dot_density(
+  input_data = nanaimo_cma_urban,
+  value = "Population",
+  values_per_dot = people_per_dot
+)
+
+map_ct_urban +
+  geom_sf(
+    mapping = aes(),
+    data = nanaimo_dots,
+    size = 0.01
+    ) +
+#  theme_void() +
+#  scale_color_brewer(palette = "Set1") +
+#  theme(legend.position = "bottom") +
+  labs(
+    #color = "Race / ethnicity",
+       caption = glue::glue("1 dot = {people_per_dot} residents") 
+  )
+
+```
+
+```{r}
+
+people_per_dot <- 50
+
+nanaimo_dots <- as_dot_density(
+  input_data = nanaimo_cma_urban,
+  value = "Population",
+  values_per_dot = people_per_dot
+)
+
+map_ct_urban +
+  geom_sf(mapping = aes(),
+          data = nanaimo_dots,
+          size = 0.01) +
+  #  theme_void() +
+  #  scale_color_brewer(palette = "Set1") +
+  #  theme(legend.position = "bottom") +
+  labs(
+    title = "Nanaimo, British Columbia, Canada",
+    subtitle = "Population, 2021 Census",
+    caption = glue::glue(
+      "1 dot = {people_per_dot} residents\nSource: Statistics Canada, 2021 Census"
+    )
+  )
+
+
+#ggsave(here("plot_output", "cma938_2021_popdensity_urban.jpg"))
+
+
+```
+
+
+#### net increase
+
+```{r}
+
+people_per_dot <- 50
+
+nanaimo_dots <- as_dot_density(
+  input_data = nanaimo_cma_urban,
+  value = "pop_change_net",
+  values_per_dot = people_per_dot
+)
+
+map_ct_urban +
+  geom_sf(mapping = aes(),
+          data = nanaimo_dots,
+          size = 0.01) +
+  #  theme_void() +
+  #  scale_color_brewer(palette = "Set1") +
+  #  theme(legend.position = "bottom") +
+  labs(
+    title = "Nanaimo, British Columbia, Canada",
+    subtitle = "Population change, 2021 Census",
+    caption = glue::glue(
+      "1 dot = {people_per_dot} new residents\nSource: Statistics Canada, 2021 Census"
+    )
+  )
+
+
+#ggsave(here("plot_output", "cma938_2021_popdensity_growth_urban.jpg"))
+
+
+```
+
+
+
+## basemap
+
+
+  coord_sf(xlim = c(-124.2,-123.7),
+           ylim = c(49.00, 49.3)) +
+
+
+```{r}
+library(basemaps)
+data(ext)
+# or use draw_ext() to interactively draw an extent yourself
+
+# view all available maps
+get_maptypes()
+
+# set defaults for the basemap
+set_defaults(map_service = "osm", map_type = "topographic")
+
+# load and return basemap map as class of choice, e.g. as image using magick:
+basemap_magick(ext)
+
+ext
+
+
+```
+
+### create bounding box
+
+https://gis.stackexchange.com/questions/403977/sf-create-polygon-from-minimum-x-and-y-coordinates
+
+```{r}
+
+lon = c(-123.8155, -124.2002)
+lat = c(49.1350,49.2632)
+
+
+nanaimo_bb <- c(
+  left = -123.9, right = -124.1000,
+  bottom = 49.1350, top = 49.2632
+  )
+nanaimo_bb <- make_bbox(lon, lat)
+
+```
+
+
+
+Error in match.arg(maptype) : 
+'arg' should be one of “stamen_terrain”, “stamen_toner”, “stamen_toner_lite”, “stamen_watercolor”, “alidade_smooth”, “alidade_smooth_dark”, “outdoors”, “stamen_terrain_background”, “stamen_toner_background”, “stamen_terrain_labels”, “stamen_terrain_lines”, “stamen_toner_labels”, “stamen_toner_lines”
+
+
+```{r}
+library(ggmap)
+
+# Stadia maps API key
+stadiaAPI <- readLines(here("scripts", "stadiaAPI.txt"))
+
+ggmap::register_stadiamaps(stadiaAPI, write = FALSE)
+#
+#nanaimo_base_map <- ggmap::get_stadiamap(
+#  bbox = nanaimo_bb,
+#  maptype = "alidade_smooth",
+#  zoom = 12
+#)
+#
+#nanaimo_base_map
+#
+ggmap(nanaimo_basemap)
+  
+
+```
+
+```{r}
+ggmap(nanaimo_basemap) +
+  geom_sf(mapping = aes(), inherit.aes = FALSE,
+          data = nanaimo_dots,
+          size = 0.01) +
+  #  theme_void() +
+  #  scale_color_brewer(palette = "Set1") +
+  #  theme(legend.position = "bottom") +
+  labs(
+    title = "Nanaimo, British Columbia, Canada",
+    subtitle = "Population, 2021 Census",
+    caption = glue::glue(
+      "1 dot = {people_per_dot} residents\nSource: Statistics Canada, 2021 Census"
+    )
+  )
+
+  
+
+```
+
+zooming in: https://www.r-bloggers.com/2019/04/zooming-in-on-maps-with-sf-and-ggplot2/
+
+
+### -30-
+

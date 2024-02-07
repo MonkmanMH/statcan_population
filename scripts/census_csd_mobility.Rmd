@@ -1,0 +1,459 @@
+---
+title: "Census: mobility by Census Subdivisions"
+subtitle: "2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: inline
+---
+
+## Census Mobility
+
+**Defintions etc**
+
+https://www12.statcan.gc.ca/census-recensement/2021/ref/98-500/010/98-500-x2021010-eng.cfm
+
+Mobility status
+Mobility status refers to the status of a person with regard to their place of residence on Census Day (May 11, 2021) in relation to their place of residence on the same date 1 or 5 years earlier.
+
+Persons who, on Census Day, lived in the same residence as they did on the same date 1 year or 5 years earlier are referred to as non-movers, and persons who, on Census Day, did not live in the same residence as they did 1 year or 5 years earlier are referred to as movers.
+
+Movers include non-migrants and migrants.
+
+Non-migrants are movers who lived in the same census subdivision on Census Day as they did on the same date 1 year or 5 years earlier.
+
+Migrants include internal migrants and external migrants.
+
+Internal migrants include migrants who lived in Canada 1 year or 5 years ago. This includes persons who moved to a different city, town, township, village, municipality or Indian reserve within Canada. Greater detail can be provided for internal migrants by identifying whether they crossed a provincial boundary or the limits of a large municipality, specifically a census metropolitan area (CMA) or census agglomeration (CA).
+
+External migrants include migrants who did not live in Canada 1 year or 5 years ago.
+
+
+## `cancensus` - an introduction
+
+** [`cancensus` github repo](https://github.com/mountainMath/cancensus) **
+
+
+** [`cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html)
+
+
+> **NOTE**
+> After an initial request to the cancensus server, all data is saved in the cache folder "cache_census". In other words, subsequent calls are to the local drive
+> The cache location and other environment parameters are set in the file "cancensus_setup.R"
+
+
+```{r setup}
+
+# tidyverse
+library(tidyverse)
+library(here)
+
+library(sf)
+library(terra)  # for plotting population as dots
+
+#library(mapboxapi)
+
+# cancensus
+library(cancensus)
+source(here::here("scripts", "cancensus_setup.R"))
+
+# MNP plot format etc
+source(here::here("scripts", "mnp_defaults_ggplot.R"))
+
+# as_dot_density()
+source(here::here("scripts", "as_dot_density.R"))
+
+```
+
+
+
+```{r}
+
+# set API key (stored in text file "secretAPI.txt")
+secretAPI <- readLines(here("scripts", "secretAPI.txt"))
+
+options(cancensus.api_key = secretAPI)
+
+```
+
+
+```{r}
+#set list of CSD names
+
+CSD_master <- read_csv(
+  here("geosuite", "2021_92-150-X_eng", "CSD.csv"),
+  col_types =
+    cols(CSDuid = col_character(),
+         SACtype  = col_character())
+)
+
+```
+
+
+***
+
+Start exploring the data
+(straight from [the `cancensus` reference guide](https://mountainmath.github.io/cancensus/index.html))
+
+
+
+
+```{r}
+
+# To view available Census datasets
+census_datasets <- list_census_datasets()
+census_datasets
+
+```
+
+
+
+#### Regions
+
+```{r}
+
+# To view available named regions at different levels of Census hierarchy for the 2016 Census (for example)
+#census_regions <- list_census_regions("CA16")
+census_regions <- list_census_regions("CA21")
+
+
+# filters: 
+#   "^" is equivalent to "starts with"
+#   "$" is equivalent to "ends with"
+#   "." is a single character wild card
+
+census_regions %>%
+  filter(grepl("^59", region) )
+
+census_regions %>%
+  filter(grepl("^59", region),
+         level == "CSD")
+
+```
+
+
+#### Household vectors 2021
+
+
+```{r}
+
+# To view available Census variables for the 2021 Census
+# NOTE: there are 7,709 in total!!!
+
+census_vectors <- list_census_vectors("CA21")
+#write_csv(census_vectors, here("data_census", "census_vectors_CA21.csv"))
+
+census_vectors
+
+```
+
+See the file "census_vectors_CA21.csv" for a complete list
+
+
+This list shows the vector numbers for the 2021 Census related to households
+
+* check the CSV file for parent_vector relationships
+
+
+v_CA21_5745	Total	Total - Mobility status 1 year ago
+v_CA21_5746	Male	Total - Mobility status 1 year ago
+v_CA21_5747	Female	Total - Mobility status 1 year ago
+v_CA21_5748	Total	Non-movers
+v_CA21_5749	Male	Non-movers
+v_CA21_5750	Female	Non-movers
+v_CA21_5751	Total	Movers
+v_CA21_5752	Male	Movers
+v_CA21_5753	Female	Movers
+v_CA21_5754	Total	Non-migrants
+v_CA21_5755	Male	Non-migrants
+v_CA21_5756	Female	Non-migrants
+v_CA21_5757	Total	Migrants
+v_CA21_5758	Male	Migrants
+v_CA21_5759	Female	Migrants
+v_CA21_5760	Total	Internal migrants
+v_CA21_5761	Male	Internal migrants
+v_CA21_5762	Female	Internal migrants
+v_CA21_5763	Total	Intraprovincial migrants
+v_CA21_5764	Male	Intraprovincial migrants
+v_CA21_5765	Female	Intraprovincial migrants
+v_CA21_5766	Total	Interprovincial migrants
+v_CA21_5767	Male	Interprovincial migrants
+v_CA21_5768	Female	Interprovincial migrants
+v_CA21_5769	Total	External migrants
+v_CA21_5770	Male	External migrants
+v_CA21_5771	Female	External migrants
+v_CA21_5772	Total	Total - Mobility status 5 years ago
+v_CA21_5773	Male	Total - Mobility status 5 years ago
+v_CA21_5774	Female	Total - Mobility status 5 years ago
+v_CA21_5775	Total	Non-movers
+v_CA21_5776	Male	Non-movers
+v_CA21_5777	Female	Non-movers
+v_CA21_5778	Total	Movers
+v_CA21_5779	Male	Movers
+v_CA21_5780	Female	Movers
+v_CA21_5781	Total	Non-migrants
+v_CA21_5782	Male	Non-migrants
+v_CA21_5783	Female	Non-migrants
+v_CA21_5784	Total	Migrants
+v_CA21_5785	Male	Migrants
+v_CA21_5786	Female	Migrants
+v_CA21_5787	Total	Internal migrants
+v_CA21_5788	Male	Internal migrants
+v_CA21_5789	Female	Internal migrants
+v_CA21_5790	Total	Intraprovincial migrants
+v_CA21_5791	Male	Intraprovincial migrants
+v_CA21_5792	Female	Intraprovincial migrants
+v_CA21_5793	Total	Interprovincial migrants
+v_CA21_5794	Male	Interprovincial migrants
+v_CA21_5795	Female	Interprovincial migrants
+v_CA21_5796	Total	External migrants
+v_CA21_5797	Male	External migrants
+v_CA21_5798	Female	External migrants
+
+
+
+Five year, total
+
+```{r}
+# list of vectors with the 2021 Census data 
+vector_list <- c(
+'v_CA21_5772', #	Total	Total - Mobility status 5 years ago
+'v_CA21_5775',	# Total	Non-movers
+'v_CA21_5778',	# Total	Movers
+'v_CA21_5781',	# Total	Non-migrants
+'v_CA21_5784',	# Total	Migrants
+'v_CA21_5787',	# Total	Internal migrants
+'v_CA21_5790',	# Total	Intraprovincial migrants
+'v_CA21_5793',	# Total	Interprovincial migrants
+'v_CA21_5796' 	# Total	External migrants
+)
+
+
+```
+
+
+
+## Comox Valley CD 5926
+
+CD 5926 == Comox Valley Regional District
+
+
+
+```{r data_files_938}
+# CENSUS SUB-DIVISIONS
+
+cma_num <- "5926"
+
+# Return data only
+census_data <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD') |> 
+  janitor::clean_names()
+
+# Return an sf-class data frame
+census_data_sf <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD', geo_format = "sf") |> 
+  janitor::clean_names()
+
+# Return a SpatialPolygonsDataFrame
+census_data_sp <- get_census(dataset='CA21', regions=list(CMA=cma_num), vectors=vector_list, level='CSD', geo_format = "sp") |> 
+  janitor::clean_names()
+
+```
+
+
+check the hierarchy
+
+```{r}
+
+comox <- census_data |> 
+  filter(
+    geo_uid == "5926005"
+  ) |> 
+  pivot_longer(
+    cols = v_ca21_5772_total_mobility_status_5_years_ago:v_ca21_5796_external_migrants,
+    names_to = "census_variable",
+    values_to = "count_households"
+  )
+
+write_csv(comox, "comox.csv")
+
+```
+
+
+
+create custom household structure hierarchy
+
+```{r}
+mobility_grp <- census_data |> 
+  select(
+    geo_uid,
+    region_name,
+    "non-movers" = v_ca21_5775_non_movers,
+    "non-migrants" = v_ca21_5781_non_migrants,
+    "intra-provincial migrants" = v_ca21_5790_intraprovincial_migrants,
+    "inter-provincial migrants" = v_ca21_5793_interprovincial_migrants,
+    "external migrants" = v_ca21_5796_external_migrants
+  ) |> 
+  pivot_longer(
+    -c(geo_uid:region_name),
+    names_to = "mobility_type",
+    values_to = "person_count"
+  ) |> 
+  # filter out IRI -- no data
+  filter(region_name != "Pentledge 2 (IRI)")
+
+mobility_grp <- mobility_grp |> 
+  group_by(region_name) |> 
+  mutate(pct_region = round((person_count / sum(person_count) * 100), 1))
+```
+
+
+```{r}
+# set factor order
+
+mobility_grp <- mobility_grp |> 
+  mutate(mobility_type = as_factor(mobility_type))
+
+levels(mobility_grp$mobility_type)
+
+ 
+
+```
+
+
+
+### plot: mobility CD
+
+```{r}
+# count
+ggplot(mobility_grp, aes(x = reorder(mobility_type, desc(mobility_type)), y = person_count)) +
+    geom_col() + 
+  coord_flip()
+```
+
+
+```{r}
+# fancy it up
+
+
+pop_range_breaks <- seq(0, 40000, by = 10000)
+
+
+ggplot(mobility_grp, aes(x = reorder(mobility_type, desc(mobility_type)), y = person_count)) +
+  geom_col(fill = "#0c3343") +
+  coord_flip() +
+  mnp_chart_theme +
+  theme(
+    # remove all gridlines
+    panel.grid = element_blank()
+  ) +
+    labs(caption = "Source: Statistics Canada, Census 2021",
+         x = NULL,
+         y = "number of persons") +
+  scale_y_continuous(
+    breaks  = pop_range_breaks,
+    limits = c(min(pop_range_breaks), max(pop_range_breaks)),
+#    labels = abs(pop_range_breaks),
+    labels = scales::label_comma()
+  )  +
+  # add vertical white "gridlines"
+  geom_hline(yintercept = pop_range_breaks, col = "white")
+
+
+ggsave(here::here("plot_output/comox_cd_mobility_type.jpg")
+#       width = 9,
+#       height = 6
+  )
+
+```
+
+
+
+by CSD: municipality only
+
+
+```{r}
+mobility_grp_muni <- mobility_grp |> 
+  filter(region_name %in% c("Comox (T)", "Courtenay (CY)", "Cumberland (VL)"))
+
+levels(mobility_grp_muni$region_name)
+```
+
+
+```{r}
+# clever function to put minor ticks without a label
+# https://stackoverflow.com/questions/34533472/insert-blanks-into-a-vector-for-e-g-minor-tick-labels-in-r
+
+every_nth <- function(x, nth, empty = TRUE, inverse = FALSE) 
+  {
+  if (!inverse) {
+    if(empty) {
+      x[1:nth == 1] <- ""
+      x
+      } else {
+        x[1:nth != 1]
+        }
+    } else {
+      if(empty) {
+        x[1:nth != 1] <- ""
+        x
+        } else {
+          x[1:nth == 1]
+        }
+    }
+}
+
+```
+
+
+```{r}
+# fancy it up
+
+
+
+pop_range_breaks <- seq(0, 100, by = 10)
+
+
+ggplot(mobility_grp_muni,
+       aes(x = reorder(mobility_type, desc(mobility_type)),
+           y = pct_region)) +
+  geom_col(fill = "#0c3343") +
+  facet_wrap( ~ region_name) +
+  coord_flip() +
+  mnp_chart_theme +
+  theme(# remove all gridlines
+    panel.grid = element_blank()) +
+  labs(caption = "Source: Statistics Canada, Census 2021",
+       x = NULL,
+       y = "percent of persons") +
+  scale_y_continuous(
+    breaks  = pop_range_breaks,
+ #   minor_breaks = pop_range_breaks / 2,
+    limits = c(min(pop_range_breaks), max(pop_range_breaks)),
+    #    labels = abs(pop_range_breaks),
+    labels = every_nth(pop_range_breaks, 2, inverse = TRUE))  +
+  # add vertical white "gridlines"
+  geom_hline(yintercept = (pop_range_breaks), col = "white") +
+  # add bar value labels
+  geom_text(
+    #data = mobility_grp_muni,
+    aes(
+#      label = pct_region
+      label = round(pct_region, 0)
+      ),
+    colour = "#0c3343",
+    hjust = -.5)
+
+
+ggsave(here::here("plot_output/comox_csd_mobility_muni.jpg")
+#       width = 9,
+#       height = 6
+  )
+
+
+```
+
+
+
+### -30-
+
