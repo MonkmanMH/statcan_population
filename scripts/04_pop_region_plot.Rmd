@@ -5,17 +5,39 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
+## setup
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 
+source("mnp_defaults_ggplot.R")
+
+
+
+# absolute value AND comma function
+# from https://stackoverflow.com/questions/37949473/how-do-you-make-ggplot-labels-use-both-labels-abs-and-labels-comma
+abs_comma <- function (x, ...) {
+  format(abs(x), ..., big.mark = ",", scientific = FALSE, trim = TRUE)
+}
+
+
 ```
+
+## get data
 
 ```{r}
 df_pop_csd_detail <- read_rds(here::here("data_statcan", "98100023.rds"))
 
 ```
+
+
+
+## filter for Comox Valley
+
+
+### omit IRI
 
 ```{r}
 
@@ -40,18 +62,163 @@ pop_total_region <- df_pop_csd_detail |>
 
 pop_total_region
 
+# set geo as factor, order
+pop_total_region <- pop_total_region |> 
+  mutate(geo = fct_relevel(geo, 
+              "Comox Valley C (Puntledge - Black Creek)",
+              "Comox Valley B (Lazo North)",
+              "Comox Valley A",
+              "Cumberland", 
+              "Courtenay",
+              "Comox"
+ ))
+  
+
+levels(pop_total_region$geo)
+
 ```
 
 
 
 ```{r}
-ggplot(pop_total_region, aes(x = geo, y = gender_3_total_gender_1)) + 
-  geom_col() +
+comox_valley_base <- ggplot(pop_total_region, aes(x = geo, y = gender_3_total_gender_1)) + 
+  geom_col(fill = "#002060") +
   coord_flip()
 
-ggsave(here::here("plot_output", "comox_valley_rd_csd_bar.png"),
-       width = 1200, height = 675,
-       units = "px")  
+pop_range_breaks <- seq(0, 30000, by = 10000)
+
+
+
+comox_valley_base +
+  mnp_chart_theme +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  #
+  scale_x_discrete(
+    labels = c(
+      "Comox Valley C\n(Puntledge - Black Creek)",
+      "Comox Valley B\n(Lazo North)",
+      "Comox Valley A",
+      "Cumberland",
+      "Courtenay",
+      "Comox"
+    )
+  ) +
+  #
+  scale_y_continuous(
+    breaks  = pop_range_breaks,
+    # custom function that combines absolute value AND commas
+    labels = abs_comma
+    ) +
+  # add vertical white "gridlines"
+  geom_hline(yintercept = pop_range_breaks, col = "white") +
+  #
+  labs(
+    title = "Comox Valley Regional District",
+    subtitle = "Population 2021, by municipality/rural area",
+    caption = "Source: Statistics Canada"
+    )
+
+
+ggsave(here::here("plot_output", "comox_valley_rd_csd_bar.png"))  
+                     
+```
+
+
+
+### with IRI
+
+```{r}
+
+#"2021A00055926005"
+
+# Comox Valley Census Division (Regional District)
+cd_num <- "5926"
+
+
+pop_total_region <- df_pop_csd_detail |> 
+  filter(
+    age_in_single_years_average_age_and_median_age_128 == "Total - Age"
+  ) |> 
+  ## filter for all CSDs in CD
+  filter(
+#    str_detect(dguid, "2021A000559260")
+    str_detect(dguid, "2021A00055926")
+  ) |> 
+  ## omit First Nations communities with "NA" population
+  filter(
+    !str_detect(geo, "Pentledge 2")
+  ) 
+
+pop_total_region
+
+# set geo as factor, order
+pop_total_region <- pop_total_region |> 
+  mutate(geo = fct_relevel(geo, 
+              "Comox 1",
+              "Comox Valley C (Puntledge - Black Creek)",
+              "Comox Valley B (Lazo North)",
+              "Comox Valley A",
+              "Cumberland", 
+              "Courtenay",
+              "Comox"
+ ))
+
+
+levels(pop_total_region$geo)
+
+pop_total_region |> 
+  select(geo, gender_3_total_gender_1) |> 
+  mutate(pct_pop = gender_3_total_gender_1 / sum(gender_3_total_gender_1))
+  
 
 ```
+
+
+
+```{r}
+comox_valley_base <- ggplot(pop_total_region, aes(x = geo, y = gender_3_total_gender_1)) + 
+  geom_col(fill = "#002060") +
+  coord_flip()
+
+pop_range_breaks <- seq(0, 30000, by = 10000)
+
+
+
+comox_valley_base +
+  mnp_chart_theme +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  #
+  scale_x_discrete(
+    labels = c(
+      "Comox 1",
+      "Comox Valley C\n(Puntledge - Black Creek)",
+      "Comox Valley B\n(Lazo North)",
+      "Comox Valley A",
+      "Cumberland",
+      "Courtenay",
+      "Comox"
+    )
+  ) +
+  #
+  scale_y_continuous(
+    breaks  = pop_range_breaks,
+    # custom function that combines absolute value AND commas
+    labels = abs_comma
+    ) +
+  # add vertical white "gridlines"
+  geom_hline(yintercept = pop_range_breaks, col = "white") +
+  #
+  labs(
+    title = "Comox Valley Regional District",
+    subtitle = "Population 2021, by municipality/rural area/Indian reserve",
+    caption = "Source: Statistics Canada"
+    )
+
+
+ggsave(here::here("plot_output", "comox_valley_rd_csd_bar.png"))  
+                     
+```
+
 

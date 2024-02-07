@@ -1,0 +1,259 @@
+---
+title: "population projection"
+author: "Martin Monkman"
+date: "2024-02-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+library(here)
+
+library(cansim)
+
+
+## ---
+## FUNCTIONS
+
+# absolute value AND comma function
+# from https://stackoverflow.com/questions/37949473/how-do-you-make-ggplot-labels-use-both-labels-abs-and-labels-comma
+abs_comma <- function (x, ...) {
+  format(abs(x), ..., big.mark = ",", scientific = FALSE, trim = TRUE)
+}
+
+
+```
+
+
+## data
+
+The Daily 2022-08-22
+Population Projections for Canada, Provinces and Territories, 2021 to 2068, 2022
+
+https://www150.statcan.gc.ca/n1/daily-quotidien/220822/dq220822b-eng.htm
+
+
+
+
+Population Projections for Canada (2021 to 2068), Provinces and Territories (2021 to 2043)
+
+https://www150.statcan.gc.ca/n1/pub/91-520-x/91-520-x2022001-eng.htm
+
+
+All the tables
+https://www150.statcan.gc.ca/n1/en/type/data?text=population+projection
+
+
+Projected population, by projection scenario, age and sex, as of July 1 (x 1,000)1
+Frequency: Annual
+
+Table: 17-10-0057-01 (formerly CANSIM 052-0005)
+
+Release date: 2022-08-22
+
+Geography: Canada, Province or territory
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710005701
+
+
+Population projections of the Canadian population, for Canada, provinces and territories (x 1,000)1
+Frequency: Annual
+
+Table: 17-10-0057-02
+
+Release date: 2022-08-22
+
+Geography: Canada, Province or territory
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710005702
+
+
+
+
+```{r}
+
+df_1710005701 <- get_cansim("17-10-0057-01")
+
+df_1710005701 <- df_1710005701 |> 
+  janitor::clean_names()
+
+```
+
+**NOTE**
+
+Use "M1" medium-growth scenario
+
+
+```{r}
+
+df_1710005701_bc <- df_1710005701 |> 
+  filter(
+    geo == "British Columbia",
+    projection_scenario == "Projection scenario M1: medium-growth",
+    sex != "Both sexes"
+    ) |> 
+  filter(
+    age_group %in% c(
+      "0 to 4 years",
+      "5 to 9 years",
+      "10 to 14 years",
+      "15 to 19 years",
+      "20 to 24 years",
+      "25 to 29 years",
+      "30 to 34 years",
+      "35 to 39 years",
+      "40 to 44 years",
+      "45 to 49 years",
+      "50 to 54 years",
+      "55 to 59 years",
+      "60 to 64 years",
+      "65 to 69 years",
+      "70 to 74 years",
+      "75 to 79 years",
+      "80 to 84 years",
+      "85 to 89 years",
+      "90 to 94 years",
+      "95 to 99 years",
+      "100 years and over"
+    )
+  )
+
+df_1710005701_bc
+
+```
+
+
+## data summary
+
+```{r}
+
+df_1710005701_bc |> 
+  group_by(ref_date) |> 
+  summarise(total_pop = sum(value))
+
+```
+
+
+
+
+```{r}
+
+## population pyramid
+
+# data
+df_pop_pyr <- df_1710005701_bc
+
+df_pop_pyr <- df_pop_pyr |> 
+# merge LT1 + 1-4 into 0-4
+#  mutate(`0 to 4` = LT1 + `1 to 4`) |> 
+  select(
+    geo,
+    ref_date,
+    sex,
+    age_group,
+    value
+    )  
+
+df_pop_pyr <- df_pop_pyr |> 
+  mutate(age_grp = fct_drop(age_group))
+
+levels(df_pop_pyr$age_grp)
+
+
+
+# set male values to negative
+df_pop_pyr <- df_pop_pyr |> 
+  mutate(
+    pop_total = case_when(
+      sex == "Males" ~ value * -1000,
+      sex == "Females" ~ value * 1000,
+      TRUE ~ NA
+    )
+  )
+
+df_pop_pyr
+
+```
+
+
+plot single year / region
+
+```{r}
+# set year and region
+plot_year <- 2033
+
+plot_region <- "British Columbia"
+#plot_region <- "Vancouver Island/Coast"
+
+
+# and plot
+df_pop_pyr_1yr <- df_pop_pyr |> 
+  filter(geo == plot_region) |> 
+  filter(ref_date == plot_year)
+
+df_pop_pyr_1yr
+
+```
+
+
+```{r}
+pl_pyramid <-  
+  ggplot(
+    df_pop_pyr_1yr,
+    aes(x = pop_total,
+           y = age_grp,
+           fill = sex
+           )) + 
+  geom_col() +
+  theme_classic() +
+  scale_fill_manual(
+    values=c("#0C3343", "#EF5A27"),          # dark blue and action orange
+    labels=c("men", "women")
+    )  +
+  xlab("population") +
+  ylab(NULL)
+
+pl_pyramid
+
+# fix scale numbering
+```
+
+
+### plot labels
+
+
+
+```{r}
+pop_range_breaks <- seq(-300000, 300000, by = 100000)
+
+pl_pyramid_total <- pl_pyramid +
+  scale_x_continuous(
+    breaks  = pop_range_breaks,
+    #                      limits = c(min(pop_range_breaks), max(pop_range_breaks)),
+#    limits = c(-1000, 1000),
+#   labels = abs(pop_range_breaks)
+#    labels = scales::comma
+   labels = abs_comma  # custom function that combines absolute value AND commas
+  )  +
+#  scale_y_discrete(
+#    breaks = c('0', '10', '20', '30', '40', '50', '60', '70', '80', '90+')
+#  ) +
+# add vertical white "gridlines"
+  geom_vline(xintercept = pop_range_breaks, col="white") +
+  labs(
+    title = glue::glue("{plot_region}: {plot_year}"),
+#       subtitle = glue::glue("total population = {community_total_population}"),
+
+       caption = "Statistics Canada"
+       ) +
+  theme(legend.position = "bottom")
+
+pl_pyramid_total
+
+
+ggsave(here::here(glue::glue("plot_output/pyramid_{plot_region}_{plot_year}_population.jpg")))
+
+```
+
+

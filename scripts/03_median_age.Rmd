@@ -19,7 +19,7 @@ df_pop_csd_detail <- read_rds(here::here("data_statcan", "98100023.rds"))
 
 ```{r}
 
-df_pop_csd_detail |> 
+median_age_bc <- df_pop_csd_detail |> 
   filter(
     age_in_single_years_average_age_and_median_age_128 == "Median age"
   ) |> 
@@ -35,6 +35,8 @@ df_pop_csd_detail |>
     !str_detect(dguid, "8\\d\\d$")
   ) |> 
   arrange(desc(gender_3_total_gender_1))
+
+median_age_bc
 
 ```
 
