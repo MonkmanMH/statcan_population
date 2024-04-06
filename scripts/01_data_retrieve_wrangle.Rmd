@@ -10,7 +10,10 @@ output: html_document
 # packages
 library(tidyverse)
 library(readxl)
+# packages: utilities
+library(here)
 library(glue)
+
 # cansim
 # reference page: https://mountainmath.github.io/cansim/index.html
 library(cansim) 
@@ -43,6 +46,27 @@ five_year_bins <- c(
   "100 years and over"  
 )
 
+five_year_bins_90 <- c(
+  "0 to 4 years",
+  "5 to 9 years",
+  "10 to 14 years",
+  "15 to 19 years",
+  "20 to 24 years",
+  "25 to 29 years",
+  "30 to 34 years",
+  "35 to 39 years",
+  "40 to 44 years",
+  "45 to 49 years",
+  "50 to 54 years",
+  "55 to 59 years",
+  "60 to 64 years",
+  "65 to 69 years",
+  "70 to 74 years",
+  "75 to 79 years",
+  "80 to 84 years",
+  "85 to 89 years",
+  "90 years and older"  
+)
 
 ```
 
@@ -106,7 +130,7 @@ df_pop_csd_detail <- read_rds(here::here("data_statcan", "98100023.rds"))
 df_pop_csd_detail
 ```
 
-## CSD - BC
+### CSD - BC
 
 ```{r}
 df_pop_csd_bc <- df_pop_csd_detail |> 
@@ -169,7 +193,7 @@ levels(df_pop_csd_bc_5yr$age_grp)
 ```
 
 
-## BC 5 year
+### BC 5 year
 
 ```{r read_bc_5yr}
 
@@ -256,7 +280,7 @@ write_csv(df_pop_csd_vi_5yr, "data_statcan/df_pop_csd_vi_5yr.csv")
 ```
 
 
-## CD - BC
+### CD - BC
 
 ```{r}
 df_pop_cd_comox <- df_pop_csd_detail |> 
@@ -284,4 +308,71 @@ levels(df_pop_cd_comox_5yr$age_grp)
 
 
 ```
+
+
+
+## Economic Region
+
+Note: for other regional boundaries, see
+https://www150.statcan.gc.ca/n1/pub/91-214-x/91-214-x2023001-eng.htm
+
+
+[Annual demographic estimates, economic regions: Interactive dashboard](https://www150.statcan.gc.ca/n1/pub/71-607-x/71-607-x2020020-eng.htm)
+
+
+**CANSIM TABLE**
+
+Population estimates, July 1, by economic region, 2016 boundaries1, 2, 3, 4, 5, 6
+Frequency: Annual
+
+Table: 17-10-0137-01
+
+Release date: 2023-01-11
+
+Geography: Canada, Province or territory, Economic region
+
+
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710013701
+
+
+
+
+```{r}
+
+df_pop_er_canada <- get_cansim("17-10-0137-01")
+
+df_pop_er_canada <- df_pop_er_canada |> 
+  janitor::clean_names()
+
+#write_rds(df_pop_er_canada, here::here("data_statcan", "df_pop_er_canada.rds"))
+
+
+unique(df_pop_er_canada$geo)
+
+unique(df_pop_er_canada$age_group)
+
+```
+
+
+### Vancouver Island & Coast
+
+
+#### 5 year bins
+
+```{r}
+
+df_pop_er_vic <- df_pop_er_canada |> 
+  filter(geo == "Vancouver Island and Coast, British Columbia") |> 
+  filter(age_group %in% five_year_bins_90)
+
+df_pop_er_vic
+
+# median age
+df_pop_er_canada |> 
+  filter(geo == "Vancouver Island and Coast, British Columbia") |> 
+  filter(age_group == "Median age")
+
+```
+
+
 
