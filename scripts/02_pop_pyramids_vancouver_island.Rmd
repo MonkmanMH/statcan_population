@@ -244,6 +244,35 @@ ggsave(here::here("plot_output/pyramid_van_isl_2021_pct.jpg"),
 
 ```
 
+version 2 without such long (needed for Qualicum comparison) scale
+
+```{r}
+
+# fix scale numbering
+
+pop_range_breaks <- seq(-5, 5, by = 1)
+
+pl_pyramid_vi +
+   scale_x_continuous(breaks  = pop_range_breaks,
+#                      limits = c(min(pop_range_breaks), max(pop_range_breaks)),
+                      limits = c(-5, 5),
+                       labels = abs(pop_range_breaks))  +
+# add vertical white "gridlines"
+#  geom_vline(xintercept = pop_range_breaks, col="white") +
+  labs(title = "Vancouver Island",
+       subtitle = glue::glue("total population = {community_total_population}"),
+
+       caption = "Census 2021: Statistics Canada") +
+  theme(legend.position = "bottom")
+
+
+ggsave(here::here("plot_output/pyramid_van_isl_2021_pct_shortscale.jpg"),
+       width = 13.333,
+       height = 7.5
+  )
+
+```
+
 
 
 ## pop pyramid function
@@ -445,6 +474,151 @@ for (i in 1:nrow(vi_community_plots)) {
     )
 
 }
+
+```
+
+
+## Van Isl & Coastal Ec Dev region
+
+### 5 year bins
+
+
+```{r}
+# from 01_data_retrieve_wrangle.Rmd
+df_pop_er_canada <- read_rds(here::here("data_statcan", "df_pop_er_canada.rds"))
+
+
+#unique(df_pop_er_canada$geo)
+#unique(df_pop_er_canada$age_group)
+
+```
+
+
+filter 
+
+```{r}
+# filter for VIC and 5-year bins
+df_pop_er_vic <- df_pop_er_canada |> 
+  filter(geo == "Vancouver Island and Coast, British Columbia") |> 
+  filter(age_group %in% five_year_bins_90) |> 
+  filter(ref_date == 2021) |> 
+#  filter(sex != "Both sexes") |> 
+  select(
+    ref_date,
+#    date,
+    geo,
+    value,
+    sex,
+    "age_grp" = age_group
+  )
+
+```
+
+
+```{r}
+# prep for plot
+
+df_pop_vic_5yr_total <- df_pop_er_vic |> 
+  pivot_wider(id_cols = c(ref_date, geo, age_grp), names_from = sex, values_from = value) |> 
+  rename(
+    "pop_total" = `Both sexes`,
+    "pop_men" = Males,
+    "pop_women" = "Females"
+  )
+df_pop_vic_5yr_total
+```
+
+
+
+```{r}
+df_pop_vic_5yr_total <- df_pop_vic_5yr_total |> 
+#  mutate(total_population = sum(total_age_grp)) |> 
+    mutate(
+    pct_men = pop_men / sum(pop_total) * 100,
+    pct_women = pop_women / sum(pop_total) * 100
+  )
+df_pop_vic_5yr_total
+```
+
+
+```{r}
+df_pop_pyramid <- df_pop_vic_5yr_total |> 
+  select(-contains("total"),
+         -contains("pct_age_grp")) |> 
+  # set value of men to negative
+  mutate(
+    pop_men = -pop_men,
+    pct_men = -pct_men
+  ) |> 
+  pivot_longer(-c(ref_date:age_grp), names_to = "gender", values_to = "pop_2021") 
+
+df_pop_pyramid
+```
+
+
+```{r}
+df_pl_vic_pyramid <- 
+  df_pop_vic_5yr_total |> 
+  select(age_grp, pct_men, pct_women) |> 
+  mutate(pct_men = -pct_men) |> 
+  pivot_longer(-age_grp, names_to = "gender", values_to = "pct_of_pop") 
+
+df_pl_vic_pyramid
+```
+
+
+median age
+
+```{r}
+# median age
+df_pop_er_canada |> 
+  filter(geo == "Vancouver Island and Coast, British Columbia") |> 
+  filter(age_group == "Median age")
+
+```
+
+```{r}
+  
+# and plot
+pl_pyramid_vi <-  
+  ggplot(df_pl_vi_pyramid, aes(x = pct_of_pop,
+           y = age_grp,
+           fill = gender
+           )) + 
+  geom_col() +
+  theme_classic() +
+  scale_fill_manual(
+    values=c("#0C3343", "#EF5A27"),          # dark blue and action orange
+    labels=c("percent men", "percent women")
+    )  +
+  xlab("percent of population") +
+  ylab(NULL)
+
+#pl_pyramid_vi
+
+# fix scale numbering
+
+pop_range_breaks <- seq(-5, 5, by = 1)
+
+pl_pyramid_vi +
+   scale_x_continuous(breaks  = pop_range_breaks,
+#                      limits = c(min(pop_range_breaks), max(pop_range_breaks)),
+                      limits = c(-5, 5),
+                       labels = abs(pop_range_breaks))  +
+# add vertical white "gridlines"
+#  geom_vline(xintercept = pop_range_breaks, col="white") +
+  labs(title = "Vancouver Island and Coastal",
+       subtitle = glue::glue("total population = {community_total_population}"),
+
+       caption = "Census 2021: Statistics Canada") +
+  theme(legend.position = "bottom")
+
+
+ggsave(here::here("plot_output/pyramid_van_isl_2021_pct.jpg"),
+       width = 13.333,
+       height = 7.5
+  )
+
 
 ```
 

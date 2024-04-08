@@ -6,6 +6,8 @@ date: "2023-06-29"
 output: html_document
 ---
 
+## setup
+
 ```{r setup}
 # packages
 library(tidyverse)
@@ -306,6 +308,7 @@ levels(df_pop_cd_comox_5yr$age_grp)
 
 #write_rds(df_pop_cd_comox_5yr, here::here("data_statcan", "df_pop_cd_comox_5yr.rds"))
 
+#df_pop_cd_comox_5yr <- read_rds(here::here("data_statcan", "df_pop_cd_comox_5yr.rds"))
 
 ```
 
@@ -345,6 +348,7 @@ df_pop_er_canada <- df_pop_er_canada |>
   janitor::clean_names()
 
 #write_rds(df_pop_er_canada, here::here("data_statcan", "df_pop_er_canada.rds"))
+#df_pop_er_canada <- read_rds(here::here("data_statcan", "df_pop_er_canada.rds"))
 
 
 unique(df_pop_er_canada$geo)
